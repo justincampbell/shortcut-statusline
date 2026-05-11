@@ -19,7 +19,7 @@ func TestResolver(t *testing.T) {
 		StoryState: "In Development",
 		EpicState:  "In Progress",
 	}
-	r := makeResolver(b)
+	r := makeResolver(b, false)
 
 	out, err := format.Render("{story.name} • {story.id} • {story.state} • {epic.name} • {epic.id} • {epic.state} • {objective.name} • {objective.state}", r)
 	if err != nil {
@@ -33,12 +33,50 @@ func TestResolver(t *testing.T) {
 
 func TestResolverMissingNamespaces(t *testing.T) {
 	b := &cache.Bundle{Story: &shortcut.Story{Name: "story"}}
-	r := makeResolver(b)
+	r := makeResolver(b, false)
 	out, err := format.Render("{story.name} {epic.name}", r)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if out != "story " {
+		t.Errorf("got %q", out)
+	}
+}
+
+func TestResolverWithLinks(t *testing.T) {
+	epicID := 42
+	milestoneID := 99
+	b := &cache.Bundle{
+		Story:     &shortcut.Story{ID: 1, Name: "story", EpicID: &epicID, AppURL: "https://app.shortcut.com/x/story/1"},
+		Epic:      &shortcut.Epic{ID: epicID, Name: "epic", MilestoneID: &milestoneID, AppURL: "https://app.shortcut.com/x/epic/42"},
+		Objective: &shortcut.Objective{ID: milestoneID, Name: "obj", AppURL: "https://app.shortcut.com/x/objective/99", State: "in progress"},
+	}
+	r := makeResolver(b, true)
+
+	out, err := format.Render("{story.name} {story.id} {epic.name} {objective.name}", r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "\x1b]8;;https://app.shortcut.com/x/story/1\x1b\\story\x1b]8;;\x1b\\ " +
+		"\x1b]8;;https://app.shortcut.com/x/story/1\x1b\\1\x1b]8;;\x1b\\ " +
+		"\x1b]8;;https://app.shortcut.com/x/epic/42\x1b\\epic\x1b]8;;\x1b\\ " +
+		"\x1b]8;;https://app.shortcut.com/x/objective/99\x1b\\obj\x1b]8;;\x1b\\"
+	if out != want {
+		t.Errorf("\n got %q\nwant %q", out, want)
+	}
+}
+
+func TestResolverLinksLeaveUrlAndStateUnwrapped(t *testing.T) {
+	b := &cache.Bundle{
+		Story:      &shortcut.Story{ID: 1, Name: "s", AppURL: "https://example.com/story/1"},
+		StoryState: "In Development",
+	}
+	r := makeResolver(b, true)
+	out, err := format.Render("{story.url}|{story.state}", r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "https://example.com/story/1|In Development" {
 		t.Errorf("got %q", out)
 	}
 }

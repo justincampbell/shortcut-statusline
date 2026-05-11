@@ -54,6 +54,11 @@ make lint
 make install   # → $GOBIN/shortcut-statusline (and a versioned copy)
 ```
 
+**Always run `make install` after making code changes.** The statusline runs
+from the installed binary on `$PATH`, so changes are invisible until
+installed — re-test against the real Claude Code / shell prompt only after
+`make install` succeeds.
+
 Versioning is `git describe --tags --dirty --always`, embedded via
 `-ldflags -X main.version=...`. Release via tag push (`v*`) triggers
 goreleaser (see `.github/workflows/release.yml`).
