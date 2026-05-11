@@ -14,6 +14,7 @@ import (
 	"github.com/justincampbell/shortcut-statusline/internal/cache"
 	"github.com/justincampbell/shortcut-statusline/internal/config"
 	"github.com/justincampbell/shortcut-statusline/internal/format"
+	"github.com/justincampbell/shortcut-statusline/internal/osc8"
 	"github.com/justincampbell/shortcut-statusline/internal/shortcut"
 )
 
@@ -26,6 +27,7 @@ func main() {
 	flag.StringVar(formatFlag, "f", "{story.name}", "Format string (shorthand)")
 	noCacheFlag := flag.Bool("no-cache", false, "Bypass the on-disk cache")
 	refreshFlag := flag.Bool("refresh", false, "Clear cache for the current branch and refetch")
+	noLinksFlag := flag.Bool("no-links", false, "Disable OSC8 hyperlinks regardless of terminal detection")
 	versionFlag := flag.Bool("version", false, "Show version")
 	flag.BoolVar(versionFlag, "v", false, "Show version (shorthand)")
 	flag.Parse()
@@ -35,13 +37,14 @@ func main() {
 		return
 	}
 
-	if err := run(*formatFlag, *noCacheFlag, *refreshFlag); err != nil {
+	links := osc8.Enabled() && !*noLinksFlag
+	if err := run(*formatFlag, *noCacheFlag, *refreshFlag, links); err != nil {
 		// Quiet failure: log to stderr but exit 0 so the statusline keeps moving.
 		fmt.Fprintln(os.Stderr, "shortcut-statusline:", err)
 	}
 }
 
-func run(formatStr string, noCache, refresh bool) error {
+func run(formatStr string, noCache, refresh, links bool) error {
 	br, err := branch.Current()
 	if err != nil {
 		// Not in a repo, detached HEAD, etc. — print nothing, succeed.
@@ -100,7 +103,7 @@ func run(formatStr string, noCache, refresh bool) error {
 		}
 	}
 
-	out, err := format.Render(formatStr, makeResolver(bundle))
+	out, err := format.Render(formatStr, makeResolver(bundle, links))
 	if err != nil {
 		return err
 	}
@@ -209,30 +212,30 @@ func loadWorkflowStates(ctx context.Context, c *cache.Cache, client *shortcut.Cl
 	return s, nil
 }
 
-func makeResolver(b *cache.Bundle) format.Resolver {
+func makeResolver(b *cache.Bundle, links bool) format.Resolver {
 	return func(ns, field string) (string, error) {
 		switch ns {
 		case format.NSStory:
-			return storyField(b, field)
+			return storyField(b, field, links)
 		case format.NSEpic:
-			return epicField(b, field)
+			return epicField(b, field, links)
 		case format.NSObjective:
-			return objectiveField(b.Objective, field)
+			return objectiveField(b.Objective, field, links)
 		}
 		return "", errors.New("unknown namespace " + ns)
 	}
 }
 
-func storyField(b *cache.Bundle, field string) (string, error) {
+func storyField(b *cache.Bundle, field string, links bool) (string, error) {
 	if b.Story == nil {
 		return "", nil
 	}
 	s := b.Story
 	switch field {
 	case "name":
-		return s.Name, nil
+		return link(s.Name, s.AppURL, links), nil
 	case "id":
-		return strconv.Itoa(s.ID), nil
+		return link(strconv.Itoa(s.ID), s.AppURL, links), nil
 	case "url":
 		return s.AppURL, nil
 	case "state":
@@ -241,16 +244,16 @@ func storyField(b *cache.Bundle, field string) (string, error) {
 	return "", fmt.Errorf("unknown field story.%s", field)
 }
 
-func epicField(b *cache.Bundle, field string) (string, error) {
+func epicField(b *cache.Bundle, field string, links bool) (string, error) {
 	if b.Epic == nil {
 		return "", nil
 	}
 	e := b.Epic
 	switch field {
 	case "name":
-		return e.Name, nil
+		return link(e.Name, e.AppURL, links), nil
 	case "id":
-		return strconv.Itoa(e.ID), nil
+		return link(strconv.Itoa(e.ID), e.AppURL, links), nil
 	case "url":
 		return e.AppURL, nil
 	case "state":
@@ -259,19 +262,26 @@ func epicField(b *cache.Bundle, field string) (string, error) {
 	return "", fmt.Errorf("unknown field epic.%s", field)
 }
 
-func objectiveField(o *shortcut.Objective, field string) (string, error) {
+func objectiveField(o *shortcut.Objective, field string, links bool) (string, error) {
 	if o == nil {
 		return "", nil
 	}
 	switch field {
 	case "name":
-		return o.Name, nil
+		return link(o.Name, o.AppURL, links), nil
 	case "id":
-		return strconv.Itoa(o.ID), nil
+		return link(strconv.Itoa(o.ID), o.AppURL, links), nil
 	case "url":
 		return o.AppURL, nil
 	case "state":
 		return o.State, nil
 	}
 	return "", fmt.Errorf("unknown field objective.%s", field)
+}
+
+func link(text, url string, enabled bool) string {
+	if !enabled {
+		return text
+	}
+	return osc8.Wrap(text, url)
 }

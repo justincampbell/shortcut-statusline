@@ -65,7 +65,27 @@ fields trigger a one-time workspace-wide workflow lookup, cached for 7 days
 - `-f, --format <string>` — default `{story.name}`
 - `--no-cache` — bypass cache (for debugging)
 - `--refresh` — clear cache for the current branch and refetch
+- `--no-links` — disable OSC8 hyperlinks
 - `-v, --version` — print version
+
+### Hyperlinks (OSC8)
+
+`name` and `id` tokens (e.g. `{story.name}`, `{epic.id}`) are wrapped in
+[OSC8 hyperlink escape sequences](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda)
+pointing at the object's app URL. Supporting terminals (iTerm2, WezTerm,
+Kitty, Ghostty, Alacritty, modern Apple Terminal, VS Code, Windows Terminal,
+…) render them as clickable links; others ignore the framing and show the
+text. On by default.
+
+Disable with `--no-links`, `SHORTCUT_STATUSLINE_NO_LINKS=1`, or the
+cross-tool [`NO_COLOR`](https://no-color.org/) (set to any non-empty value).
+
+If you're inside tmux and links don't render, tmux is likely stripping the
+escapes. Add this to `~/.tmux.conf`:
+
+```tmux
+set -as terminal-features ',*:hyperlinks'
+```
 
 ### Cache
 
