@@ -73,6 +73,42 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+func TestWorkflowStates(t *testing.T) {
+	c := &Cache{Dir: t.TempDir(), TTL: time.Hour, WorkflowTTL: time.Hour}
+	s := &WorkflowStates{
+		Story: map[int]string{1: "Backlog", 2: "Done"},
+		Epic:  map[int]string{10: "Not Started"},
+	}
+	if err := c.PutWorkflowStates(s); err != nil {
+		t.Fatal(err)
+	}
+	got, fresh, err := c.GetWorkflowStates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fresh {
+		t.Errorf("expected fresh")
+	}
+	if got.Story[1] != "Backlog" || got.Epic[10] != "Not Started" {
+		t.Errorf("got %+v", got)
+	}
+}
+
+func TestWorkflowStatesStale(t *testing.T) {
+	c := &Cache{Dir: t.TempDir(), TTL: time.Hour, WorkflowTTL: time.Nanosecond}
+	if err := c.PutWorkflowStates(&WorkflowStates{Story: map[int]string{1: "x"}}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Nanosecond)
+	got, fresh, err := c.GetWorkflowStates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || fresh {
+		t.Errorf("expected stale present, got=%v fresh=%v", got, fresh)
+	}
+}
+
 func TestSlashesInBranchName(t *testing.T) {
 	c := &Cache{Dir: t.TempDir(), TTL: time.Hour}
 	branch := "feature/sc-12345/with-extra-slashes"

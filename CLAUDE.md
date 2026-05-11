@@ -17,7 +17,7 @@ git branch (`sc-NNNNN`), fetches via the Shortcut API, caches per-branch.
 
 - **The statusline is hot.** Cache hits must stay <20ms. Network calls have a 3s timeout. Any error after-the-fact prefers stale cache > empty output > error. Never block a shell prompt.
 - **Exit 0 on every recoverable failure.** Errors go to stderr; the prompt keeps moving.
-- **Lazy fetch.** Only fetch the epic if the format references `epic.*` or `objective.*`. Only fetch the objective if the format references `objective.*`.
+- **Lazy fetch.** Only fetch the epic if the format references `epic.*` or `objective.*`. Only fetch the objective if the format references `objective.*`. Only fetch workflows if the format references `story.status` or `epic.status`. Workflow lookups are cached separately with a much longer TTL (`DefaultWorkflowTTL`, 7d) since they change rarely.
 
 ## Build / test / install
 

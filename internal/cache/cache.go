@@ -17,19 +17,35 @@ import (
 // DefaultTTL is how long a cached bundle is considered fresh.
 const DefaultTTL = time.Hour
 
+// DefaultWorkflowTTL is how long cached workflow state lookups are considered
+// fresh. Workflows change rarely, so this is much longer than the bundle TTL.
+const DefaultWorkflowTTL = 7 * 24 * time.Hour
+
 // Bundle is the cached set of resources for one branch.
 type Bundle struct {
-	FetchedAt int64                `json:"fetched_at"`
-	Story     *shortcut.Story      `json:"story,omitempty"`
-	Epic      *shortcut.Epic       `json:"epic,omitempty"`
-	Objective *shortcut.Objective  `json:"objective,omitempty"`
+	FetchedAt   int64               `json:"fetched_at"`
+	Story       *shortcut.Story     `json:"story,omitempty"`
+	Epic        *shortcut.Epic      `json:"epic,omitempty"`
+	Objective   *shortcut.Objective `json:"objective,omitempty"`
+	StoryStatus string              `json:"story_status,omitempty"`
+	EpicStatus  string              `json:"epic_status,omitempty"`
+}
+
+// WorkflowStates is the cached id→name lookup for workflow + epic states.
+type WorkflowStates struct {
+	FetchedAt int64          `json:"fetched_at"`
+	Story     map[int]string `json:"story,omitempty"`
+	Epic      map[int]string `json:"epic,omitempty"`
 }
 
 // Cache is a per-user filesystem cache.
 type Cache struct {
-	Dir string
-	TTL time.Duration
+	Dir         string
+	TTL         time.Duration
+	WorkflowTTL time.Duration
 }
+
+const workflowFile = "workflows.json"
 
 // New returns a Cache rooted at ~/.cache/shortcut-statusline (or
 // $XDG_CACHE_HOME equivalent).
@@ -44,9 +60,16 @@ func New() (*Cache, error) {
 			ttl = d
 		}
 	}
+	workflowTTL := DefaultWorkflowTTL
+	if v := os.Getenv("SHORTCUT_STATUSLINE_WORKFLOW_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			workflowTTL = d
+		}
+	}
 	return &Cache{
-		Dir: filepath.Join(base, "shortcut-statusline"),
-		TTL: ttl,
+		Dir:         filepath.Join(base, "shortcut-statusline"),
+		TTL:         ttl,
+		WorkflowTTL: workflowTTL,
 	}, nil
 }
 
@@ -112,6 +135,54 @@ func (c *Cache) Delete(branch string) error {
 	err := os.Remove(c.path(branch))
 	if err != nil && !os.IsNotExist(err) {
 		return err
+	}
+	return nil
+}
+
+// GetWorkflowStates returns the cached id→name maps for workflow + epic
+// states and whether they are fresh.
+func (c *Cache) GetWorkflowStates() (s *WorkflowStates, fresh bool, err error) {
+	data, err := os.ReadFile(filepath.Join(c.Dir, workflowFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	s = &WorkflowStates{}
+	if err := json.Unmarshal(data, s); err != nil {
+		return nil, false, err
+	}
+	age := time.Since(time.Unix(s.FetchedAt, 0))
+	return s, age < c.WorkflowTTL, nil
+}
+
+// PutWorkflowStates writes the id→name maps, atomic via temp+rename.
+func (c *Cache) PutWorkflowStates(s *WorkflowStates) error {
+	if err := os.MkdirAll(c.Dir, 0o755); err != nil {
+		return err
+	}
+	s.FetchedAt = time.Now().Unix()
+	data, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	final := filepath.Join(c.Dir, workflowFile)
+	tmp, err := os.CreateTemp(c.Dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, final); err != nil {
+		return fmt.Errorf("rename workflow cache: %w", err)
 	}
 	return nil
 }

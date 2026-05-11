@@ -59,6 +59,24 @@ func (c *Client) GetObjective(ctx context.Context, id int) (*Objective, error) {
 	return &o, nil
 }
 
+// GetWorkflows lists every workflow in the workspace (and its states).
+func (c *Client) GetWorkflows(ctx context.Context) ([]Workflow, error) {
+	var ws []Workflow
+	if err := c.get(ctx, "/workflows", &ws); err != nil {
+		return nil, err
+	}
+	return ws, nil
+}
+
+// GetEpicWorkflow returns the workspace's epic workflow.
+func (c *Client) GetEpicWorkflow(ctx context.Context) (*EpicWorkflow, error) {
+	var ew EpicWorkflow
+	if err := c.get(ctx, "/epic-workflow", &ew); err != nil {
+		return nil, err
+	}
+	return &ew, nil
+}
+
 func (c *Client) get(ctx context.Context, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
 	if err != nil {

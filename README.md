@@ -46,14 +46,18 @@ used if available, otherwise nothing is printed — the prompt is never blocked.
 | `{story.name}`     | Story title                    |
 | `{story.id}`       | Numeric ID                     |
 | `{story.url}`      | App URL                        |
+| `{story.status}`   | Workflow state name (e.g. "In Development") |
 | `{epic.name}`      | Epic title                     |
 | `{epic.id}`        | Epic ID                        |
 | `{epic.url}`       | Epic app URL                   |
+| `{epic.status}`    | Epic state name (e.g. "In Progress") |
 | `{objective.name}` | Objective (milestone) title    |
 | `{objective.id}`   | Objective ID                   |
 | `{objective.url}`  | Objective app URL              |
 
-Epic and objective are only fetched if your format references them.
+Epic and objective are only fetched if your format references them. Status
+fields trigger a one-time workspace-wide workflow lookup, cached for 7 days
+(override with `SHORTCUT_STATUSLINE_WORKFLOW_TTL`).
 
 ### Flags
 

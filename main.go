@@ -19,8 +19,10 @@ import (
 
 var version = "dev"
 
+const formatHelp = "Format string. Tokens: {story.name|id|url|status}, {epic.name|id|url|status}, {objective.name|id|url}"
+
 func main() {
-	formatFlag := flag.String("format", "{story.name}", "Format string. Tokens: {story.name|id|url}, {epic.name|id|url}, {objective.name|id|url}")
+	formatFlag := flag.String("format", "{story.name}", formatHelp)
 	flag.StringVar(formatFlag, "f", "{story.name}", "Format string (shorthand)")
 	noCacheFlag := flag.Bool("no-cache", false, "Bypass the on-disk cache")
 	refreshFlag := flag.Bool("refresh", false, "Clear cache for the current branch and refetch")
@@ -54,6 +56,11 @@ func run(formatStr string, noCache, refresh bool) error {
 	namespaces := format.Namespaces(formatStr)
 	wantEpic := namespaces[format.NSEpic] || namespaces[format.NSObjective]
 	wantObj := namespaces[format.NSObjective]
+	wantStoryStatus := format.HasField(formatStr, format.NSStory, "status")
+	wantEpicStatus := format.HasField(formatStr, format.NSEpic, "status")
+	if wantEpicStatus {
+		wantEpic = true
+	}
 
 	c, err := cache.New()
 	if err != nil {
@@ -68,14 +75,14 @@ func run(formatStr string, noCache, refresh bool) error {
 	if !noCache && !refresh {
 		b, fresh, err := c.Get(br)
 		if err == nil && fresh && b != nil && b.Story != nil && b.Story.ID == storyID {
-			if hasNeededData(b, wantEpic, wantObj) {
+			if hasNeededData(b, wantEpic, wantObj, wantStoryStatus, wantEpicStatus) {
 				bundle = b
 			}
 		}
 	}
 
 	if bundle == nil {
-		fetched, fetchErr := fetchBundle(storyID, wantEpic, wantObj)
+		fetched, fetchErr := fetchBundle(c, storyID, wantEpic, wantObj, wantStoryStatus, wantEpicStatus, noCache, refresh)
 		if fetchErr != nil {
 			// On API failure, fall back to stale cache.
 			if stale, _, err := c.Get(br); err == nil && stale != nil && stale.Story != nil && stale.Story.ID == storyID {
@@ -104,17 +111,23 @@ func run(formatStr string, noCache, refresh bool) error {
 	return nil
 }
 
-func hasNeededData(b *cache.Bundle, wantEpic, wantObj bool) bool {
+func hasNeededData(b *cache.Bundle, wantEpic, wantObj, wantStoryStatus, wantEpicStatus bool) bool {
 	if wantEpic && b.Story != nil && b.Story.EpicID != nil && b.Epic == nil {
 		return false
 	}
 	if wantObj && b.Epic != nil && b.Epic.MilestoneID != nil && b.Objective == nil {
 		return false
 	}
+	if wantStoryStatus && b.StoryStatus == "" {
+		return false
+	}
+	if wantEpicStatus && b.Epic != nil && b.EpicStatus == "" {
+		return false
+	}
 	return true
 }
 
-func fetchBundle(storyID int, wantEpic, wantObj bool) (*cache.Bundle, error) {
+func fetchBundle(c *cache.Cache, storyID int, wantEpic, wantObj, wantStoryStatus, wantEpicStatus, noCache, refresh bool) (*cache.Bundle, error) {
 	token, err := config.Token()
 	if err != nil {
 		return nil, err
@@ -144,16 +157,65 @@ func fetchBundle(storyID int, wantEpic, wantObj bool) (*cache.Bundle, error) {
 		}
 	}
 
+	if wantStoryStatus || wantEpicStatus {
+		states, err := loadWorkflowStates(ctx, c, client, noCache || refresh)
+		if err != nil {
+			return nil, err
+		}
+		if wantStoryStatus && b.Story != nil {
+			b.StoryStatus = states.Story[b.Story.WorkflowStateID]
+		}
+		if wantEpicStatus && b.Epic != nil {
+			b.EpicStatus = states.Epic[b.Epic.EpicStateID]
+		}
+	}
+
 	return b, nil
+}
+
+// loadWorkflowStates returns the workflow + epic state lookup maps, using a
+// long-TTL on-disk cache. Force=true skips the cache.
+func loadWorkflowStates(ctx context.Context, c *cache.Cache, client *shortcut.Client, force bool) (*cache.WorkflowStates, error) {
+	if !force {
+		if s, fresh, err := c.GetWorkflowStates(); err == nil && fresh && s != nil {
+			return s, nil
+		}
+	}
+
+	wfs, err := client.GetWorkflows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ew, err := client.GetEpicWorkflow(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &cache.WorkflowStates{
+		Story: map[int]string{},
+		Epic:  map[int]string{},
+	}
+	for _, w := range wfs {
+		for _, st := range w.States {
+			s.Story[st.ID] = st.Name
+		}
+	}
+	for _, st := range ew.EpicStates {
+		s.Epic[st.ID] = st.Name
+	}
+	if err := c.PutWorkflowStates(s); err != nil {
+		fmt.Fprintln(os.Stderr, "shortcut-statusline: workflow cache write:", err)
+	}
+	return s, nil
 }
 
 func makeResolver(b *cache.Bundle) format.Resolver {
 	return func(ns, field string) (string, error) {
 		switch ns {
 		case format.NSStory:
-			return storyField(b.Story, field)
+			return storyField(b, field)
 		case format.NSEpic:
-			return epicField(b.Epic, field)
+			return epicField(b, field)
 		case format.NSObjective:
 			return objectiveField(b.Objective, field)
 		}
@@ -161,10 +223,11 @@ func makeResolver(b *cache.Bundle) format.Resolver {
 	}
 }
 
-func storyField(s *shortcut.Story, field string) (string, error) {
-	if s == nil {
+func storyField(b *cache.Bundle, field string) (string, error) {
+	if b.Story == nil {
 		return "", nil
 	}
+	s := b.Story
 	switch field {
 	case "name":
 		return s.Name, nil
@@ -172,14 +235,17 @@ func storyField(s *shortcut.Story, field string) (string, error) {
 		return strconv.Itoa(s.ID), nil
 	case "url":
 		return s.AppURL, nil
+	case "status":
+		return b.StoryStatus, nil
 	}
 	return "", fmt.Errorf("unknown field story.%s", field)
 }
 
-func epicField(e *shortcut.Epic, field string) (string, error) {
-	if e == nil {
+func epicField(b *cache.Bundle, field string) (string, error) {
+	if b.Epic == nil {
 		return "", nil
 	}
+	e := b.Epic
 	switch field {
 	case "name":
 		return e.Name, nil
@@ -187,6 +253,8 @@ func epicField(e *shortcut.Epic, field string) (string, error) {
 		return strconv.Itoa(e.ID), nil
 	case "url":
 		return e.AppURL, nil
+	case "status":
+		return b.EpicStatus, nil
 	}
 	return "", fmt.Errorf("unknown field epic.%s", field)
 }

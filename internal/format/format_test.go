@@ -15,6 +15,29 @@ func TestNamespaces(t *testing.T) {
 	}
 }
 
+func TestTokens(t *testing.T) {
+	got := Tokens("{story.name} • {epic.status}")
+	if len(got) != 2 {
+		t.Fatalf("got %d tokens", len(got))
+	}
+	if got[0] != (Token{Namespace: "story", Field: "name"}) {
+		t.Errorf("0 = %+v", got[0])
+	}
+	if got[1] != (Token{Namespace: "epic", Field: "status"}) {
+		t.Errorf("1 = %+v", got[1])
+	}
+}
+
+func TestHasField(t *testing.T) {
+	tpl := "{story.name} • {epic.status}"
+	if !HasField(tpl, "epic", "status") {
+		t.Errorf("want epic.status")
+	}
+	if HasField(tpl, "story", "status") {
+		t.Errorf("did not want story.status")
+	}
+}
+
 func TestRender(t *testing.T) {
 	r := func(ns, field string) (string, error) {
 		return ns + "." + field, nil

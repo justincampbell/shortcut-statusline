@@ -69,6 +69,46 @@ func TestGetStoryNotFound(t *testing.T) {
 	}
 }
 
+func TestGetWorkflows(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/workflows", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{"id":1,"name":"Eng","states":[{"id":100,"name":"Backlog"},{"id":101,"name":"In Dev"}]}]`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New("tok")
+	c.BaseURL = srv.URL
+
+	ws, err := c.GetWorkflows(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ws) != 1 || len(ws[0].States) != 2 || ws[0].States[1].Name != "In Dev" {
+		t.Errorf("got %+v", ws)
+	}
+}
+
+func TestGetEpicWorkflow(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/epic-workflow", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"epic_states":[{"id":1,"name":"To Do"},{"id":2,"name":"Done"}]}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New("tok")
+	c.BaseURL = srv.URL
+
+	ew, err := c.GetEpicWorkflow(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ew.EpicStates) != 2 || ew.EpicStates[0].Name != "To Do" {
+		t.Errorf("got %+v", ew)
+	}
+}
+
 func TestGetObjective(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/objectives/99", func(w http.ResponseWriter, _ *http.Request) {
