@@ -89,6 +89,21 @@ type Groups struct {
 	Groups    map[string]GroupInfo `json:"groups,omitempty"`
 }
 
+// BranchStoryEntry records the story ID resolved for a given branch via
+// the Shortcut search API. StoryID == 0 is a cached "no match" — we
+// asked Shortcut and got nothing back, so the next invocation can skip
+// the API call too.
+type BranchStoryEntry struct {
+	StoryID   int   `json:"story_id"`
+	FetchedAt int64 `json:"fetched_at"`
+}
+
+// BranchStories is the on-disk shape of branches.json: a single map of
+// hashed branch names to story IDs.
+type BranchStories struct {
+	Branches map[string]BranchStoryEntry `json:"branches,omitempty"`
+}
+
 // Cache is a per-user filesystem cache.
 type Cache struct {
 	Dir         string
@@ -100,6 +115,7 @@ const (
 	workflowFile = "workflows.json"
 	membersFile  = "members.json"
 	groupsFile   = "groups.json"
+	branchesFile = "branches.json"
 )
 
 // New returns a Cache rooted at ~/.cache/shortcut-statusline (or
@@ -268,4 +284,63 @@ func (c *Cache) GetGroups() (g *Groups, fresh bool, err error) {
 func (c *Cache) PutGroups(g *Groups) error {
 	g.FetchedAt = time.Now().Unix()
 	return c.writeAtomic(filepath.Join(c.Dir, groupsFile), g)
+}
+
+// GetBranchStoryEntry returns the cached branch→story-id entry, if any,
+// along with whether it is still fresh (per WorkflowTTL). A nil entry
+// means the branch isn't cached at all; an entry with StoryID=0 is a
+// cached "no match" — useful for branches like `main` that we don't
+// want to re-query on every prompt.
+func (c *Cache) GetBranchStoryEntry(branch string) (entry *BranchStoryEntry, fresh bool, err error) {
+	bs, err := c.loadBranchStories()
+	if err != nil || bs == nil {
+		return nil, false, err
+	}
+	e, ok := bs.Branches[hashBranch(branch)]
+	if !ok {
+		return nil, false, nil
+	}
+	age := time.Since(time.Unix(e.FetchedAt, 0))
+	return &e, age < c.WorkflowTTL, nil
+}
+
+// PutBranchStoryEntry merges (branch → storyID) into branches.json. A
+// storyID of 0 records a cached "no match". Other entries in the file
+// are preserved (read-modify-write).
+func (c *Cache) PutBranchStoryEntry(branch string, storyID int) error {
+	bs, err := c.loadBranchStories()
+	if err != nil {
+		return err
+	}
+	if bs == nil {
+		bs = &BranchStories{}
+	}
+	if bs.Branches == nil {
+		bs.Branches = map[string]BranchStoryEntry{}
+	}
+	bs.Branches[hashBranch(branch)] = BranchStoryEntry{
+		StoryID:   storyID,
+		FetchedAt: time.Now().Unix(),
+	}
+	return c.writeAtomic(filepath.Join(c.Dir, branchesFile), bs)
+}
+
+func (c *Cache) loadBranchStories() (*BranchStories, error) {
+	data, err := os.ReadFile(filepath.Join(c.Dir, branchesFile))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	bs := &BranchStories{}
+	if err := json.Unmarshal(data, bs); err != nil {
+		return nil, err
+	}
+	return bs, nil
+}
+
+func hashBranch(branch string) string {
+	sum := sha256.Sum256([]byte(branch))
+	return hex.EncodeToString(sum[:])[:16]
 }

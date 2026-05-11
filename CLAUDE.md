@@ -8,6 +8,7 @@ git branch (`sc-NNNNN`), fetches via the Shortcut API, caches per-branch.
 
 - `main.go` — flag parsing, orchestration, quiet-failure error handling.
 - `internal/branch` — finds `.git` (walking up; understands worktrees), reads HEAD, extracts `sc-NNNNN`.
+- `internal/storyid` — ordered list of `Resolver`s tried first-match-wins to map a git branch to a Shortcut story ID. Two today: `BranchRegex` (the parse out of the branch name) and `BranchSearch` (Shortcut `/search/stories?query=branch:<name>`, cached in `branches.json`). New resolvers go here.
 - `internal/config` — token resolution: `SHORTCUT_API_TOKEN` → `~/.config/shortcut-cli/config.json` (XDG-style on all platforms; matches the `short` CLI).
 - `internal/shortcut` — minimal HTTP client for Stories, Epics, Objectives. Injectable `BaseURL` for tests.
 - `internal/cache` — per-branch JSON cache. Filename = SHA256(branch)[:16]. Atomic write via temp file + rename.

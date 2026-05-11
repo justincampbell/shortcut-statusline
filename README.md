@@ -3,10 +3,13 @@
 A small Go CLI that prints info about the current Shortcut story for use in a
 shell prompt or [Claude Code](https://claude.com/claude-code) statusline.
 
-It reads the current git branch, extracts the story ID (e.g. `sc-12345`),
-calls the Shortcut API for the story (and, if your format references them, the
-epic and objective), and prints the rendered template. Results are cached
-per-branch on disk so subsequent invocations are <20ms.
+It reads the current git branch, resolves a Shortcut story ID from it
+(first by parsing `sc-NNNNN` out of the branch, then — for branches like
+`chore/sc-new-story/foo` — by asking Shortcut directly via
+`/search/stories?query=branch:<name>`), calls the API for the story
+(and, if your format references them, the epic and objective), and
+prints the rendered template. Results are cached per-branch on disk so
+subsequent invocations are <20ms.
 
 ## Install
 

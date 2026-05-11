@@ -17,6 +17,7 @@ import (
 	"github.com/justincampbell/shortcut-statusline/internal/format"
 	"github.com/justincampbell/shortcut-statusline/internal/osc8"
 	"github.com/justincampbell/shortcut-statusline/internal/shortcut"
+	"github.com/justincampbell/shortcut-statusline/internal/storyid"
 )
 
 var version = "dev"
@@ -55,11 +56,6 @@ func run(formatStr string, noCache, refresh, links, colors bool) error {
 		return nil
 	}
 
-	storyID, ok := branch.StoryID(br)
-	if !ok {
-		return nil
-	}
-
 	w := wantsFor(formatStr, colors)
 
 	c, err := cache.New()
@@ -69,6 +65,19 @@ func run(formatStr string, noCache, refresh, links, colors bool) error {
 
 	if refresh {
 		_ = c.Delete(br)
+	}
+
+	ctx := context.Background()
+	resolvers := []storyid.Resolver{
+		storyid.BranchRegex(),
+		storyid.BranchSearch{Cache: c, Token: config.Token, NoCache: noCache || refresh},
+	}
+	storyID, _, ok, errs := storyid.Resolve(ctx, br, resolvers)
+	for _, e := range errs {
+		fmt.Fprintln(os.Stderr, "shortcut-statusline:", e)
+	}
+	if !ok {
+		return nil
 	}
 
 	var bundle *cache.Bundle

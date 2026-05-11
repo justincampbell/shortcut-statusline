@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -93,6 +94,21 @@ func (c *Client) GetGroups(ctx context.Context) ([]Group, error) {
 		return nil, err
 	}
 	return gs, nil
+}
+
+// SearchStories runs a Shortcut /search/stories query. We use this to
+// map a branch name to its linked story when the branch itself doesn't
+// contain `sc-NNNNN` (e.g. `branch:chore/sc-new-story/foo`). page_size
+// is capped at 1 because callers only need the first match.
+func (c *Client) SearchStories(ctx context.Context, query string) ([]Story, error) {
+	path := "/search/stories?page_size=1&query=" + url.QueryEscape(query)
+	var resp struct {
+		Data []Story `json:"data"`
+	}
+	if err := c.get(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
 }
 
 func (c *Client) get(ctx context.Context, path string, out any) error {

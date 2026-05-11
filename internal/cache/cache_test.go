@@ -188,6 +188,68 @@ func TestMembersStale(t *testing.T) {
 	}
 }
 
+func TestBranchStoryEntry_PutGetAndMerge(t *testing.T) {
+	c := &Cache{Dir: t.TempDir(), TTL: time.Hour, WorkflowTTL: time.Hour}
+	if err := c.PutBranchStoryEntry("feature/sc-1", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.PutBranchStoryEntry("main", 0); err != nil { // cached "no match"
+		t.Fatal(err)
+	}
+	// Re-Put should merge, not clobber.
+	if err := c.PutBranchStoryEntry("feature/sc-2", 2); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := map[string]int{
+		"feature/sc-1": 1,
+		"feature/sc-2": 2,
+		"main":         0,
+	}
+	for branch, wantID := range cases {
+		entry, fresh, err := c.GetBranchStoryEntry(branch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if entry == nil {
+			t.Errorf("%q: expected entry, got nil", branch)
+			continue
+		}
+		if !fresh {
+			t.Errorf("%q: expected fresh", branch)
+		}
+		if entry.StoryID != wantID {
+			t.Errorf("%q: id = %d want %d", branch, entry.StoryID, wantID)
+		}
+	}
+}
+
+func TestBranchStoryEntry_Missing(t *testing.T) {
+	c := &Cache{Dir: t.TempDir(), TTL: time.Hour, WorkflowTTL: time.Hour}
+	entry, fresh, err := c.GetBranchStoryEntry("anything")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry != nil || fresh {
+		t.Errorf("expected miss, got entry=%+v fresh=%v", entry, fresh)
+	}
+}
+
+func TestBranchStoryEntry_Stale(t *testing.T) {
+	c := &Cache{Dir: t.TempDir(), TTL: time.Hour, WorkflowTTL: time.Nanosecond}
+	if err := c.PutBranchStoryEntry("b", 7); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Nanosecond)
+	entry, fresh, err := c.GetBranchStoryEntry("b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry == nil || fresh {
+		t.Errorf("expected stale present, got entry=%+v fresh=%v", entry, fresh)
+	}
+}
+
 func TestSlashesInBranchName(t *testing.T) {
 	c := &Cache{Dir: t.TempDir(), TTL: time.Hour}
 	branch := "feature/sc-12345/with-extra-slashes"

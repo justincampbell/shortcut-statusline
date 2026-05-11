@@ -149,6 +149,31 @@ func TestGetGroups(t *testing.T) {
 	}
 }
 
+func TestSearchStories(t *testing.T) {
+	var gotQuery string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/search/stories", func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("query")
+		_, _ = w.Write([]byte(`{"data":[{"id":203310,"name":"Athena pipeline docs","story_type":"chore"}]}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New("tok")
+	c.BaseURL = srv.URL
+
+	stories, err := c.SearchStories(context.Background(), "branch:chore/sc-new-story/athena-pipeline-docs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotQuery != "branch:chore/sc-new-story/athena-pipeline-docs" {
+		t.Errorf("query param = %q", gotQuery)
+	}
+	if len(stories) != 1 || stories[0].ID != 203310 {
+		t.Errorf("got %+v", stories)
+	}
+}
+
 func TestGetObjective(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/objectives/99", func(w http.ResponseWriter, _ *http.Request) {
