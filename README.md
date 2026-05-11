@@ -30,7 +30,7 @@ go install github.com/justincampbell/shortcut-statusline@latest
 ## Usage
 
 ```sh
-shortcut-statusline                                  # default: {story.id}: {story.name} ({epic.name})
+shortcut-statusline                                  # default: {story.idName} ({epic.idName})
 shortcut-statusline -f '{story.name}'
 shortcut-statusline -f '{story.name} • {epic.name} • {objective.name}'
 shortcut-statusline -f '[{story.id}] {story.name}'
@@ -70,7 +70,7 @@ fields trigger a one-time workspace-wide workflow lookup, cached for 7 days
 
 ### Flags
 
-- `-f, --format <string>` — default `{story.id}: {story.name} ({epic.name})`
+- `-f, --format <string>` — default `{story.idName} ({epic.idName})`
 - `--no-cache` — bypass cache (for debugging)
 - `--refresh` — clear cache for the current branch and refetch
 - `--no-links` — disable OSC8 hyperlinks

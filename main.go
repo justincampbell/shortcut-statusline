@@ -24,7 +24,7 @@ var version = "dev"
 const formatHelp = "Format string. Tokens: {story.name|id|idName|url|state}, {epic.name|id|idName|url|state}, {objective.name|id|idName|url|state}"
 
 func main() {
-	const defaultFormat = "{story.id}: {story.name} ({epic.name})"
+	const defaultFormat = "{story.idName} ({epic.idName})"
 	formatFlag := flag.String("format", defaultFormat, formatHelp)
 	flag.StringVar(formatFlag, "f", defaultFormat, "Format string (shorthand)")
 	noCacheFlag := flag.Bool("no-cache", false, "Bypass the on-disk cache")
