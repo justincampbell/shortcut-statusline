@@ -23,19 +23,28 @@ const DefaultWorkflowTTL = 7 * 24 * time.Hour
 
 // Bundle is the cached set of resources for one branch.
 type Bundle struct {
-	FetchedAt   int64               `json:"fetched_at"`
-	Story       *shortcut.Story     `json:"story,omitempty"`
-	Epic        *shortcut.Epic      `json:"epic,omitempty"`
-	Objective   *shortcut.Objective `json:"objective,omitempty"`
-	StoryState  string              `json:"story_state,omitempty"`
-	EpicState   string              `json:"epic_state,omitempty"`
+	FetchedAt      int64               `json:"fetched_at"`
+	Story          *shortcut.Story     `json:"story,omitempty"`
+	Epic           *shortcut.Epic      `json:"epic,omitempty"`
+	Objective      *shortcut.Objective `json:"objective,omitempty"`
+	StoryState     string              `json:"story_state,omitempty"`
+	StoryStateType string              `json:"story_state_type,omitempty"`
+	EpicState      string              `json:"epic_state,omitempty"`
+	EpicStateType  string              `json:"epic_state_type,omitempty"`
 }
 
-// WorkflowStates is the cached id→name lookup for workflow + epic states.
+// StateInfo is the cached name+type for a single workflow state.
+type StateInfo struct {
+	Name string `json:"name"`
+	Type string `json:"type,omitempty"`
+}
+
+// WorkflowStates is the cached id→{name,type} lookup for workflow + epic
+// states.
 type WorkflowStates struct {
-	FetchedAt int64          `json:"fetched_at"`
-	Story     map[int]string `json:"story,omitempty"`
-	Epic      map[int]string `json:"epic,omitempty"`
+	FetchedAt int64             `json:"fetched_at"`
+	Story     map[int]StateInfo `json:"story,omitempty"`
+	Epic      map[int]StateInfo `json:"epic,omitempty"`
 }
 
 // Cache is a per-user filesystem cache.

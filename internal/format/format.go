@@ -73,12 +73,15 @@ func Render(template string, resolver Resolver) (string, error) {
 	return result, nil
 }
 
-// CollapseWhitespace tidies up the rendered output: collapse runs of spaces
-// and strip dangling separators left by empty values. Useful when an epic
-// or objective is missing and the template had " • " between them.
+var emptyEnclosureRegex = regexp.MustCompile(`\s*(\(\)|\[\]|\{\})\s*`)
+var spacesRegex = regexp.MustCompile(`[ \t]+`)
+
+// CollapseWhitespace tidies up the rendered output: strip empty
+// enclosures (`()`, `[]`, `{}`) left by missing values, collapse runs of
+// spaces, and trim. Useful when a default format like
+// `{story.name} ({epic.name})` resolves an epic-less story.
 func CollapseWhitespace(s string) string {
-	s = strings.TrimSpace(s)
-	// Multiple spaces → one.
-	s = regexp.MustCompile(`[ \t]+`).ReplaceAllString(s, " ")
-	return s
+	s = emptyEnclosureRegex.ReplaceAllString(s, " ")
+	s = spacesRegex.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
 }

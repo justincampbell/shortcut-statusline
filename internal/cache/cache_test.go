@@ -76,8 +76,13 @@ func TestDelete(t *testing.T) {
 func TestWorkflowStates(t *testing.T) {
 	c := &Cache{Dir: t.TempDir(), TTL: time.Hour, WorkflowTTL: time.Hour}
 	s := &WorkflowStates{
-		Story: map[int]string{1: "Backlog", 2: "Done"},
-		Epic:  map[int]string{10: "Not Started"},
+		Story: map[int]StateInfo{
+			1: {Name: "Backlog", Type: "backlog"},
+			2: {Name: "Done", Type: "done"},
+		},
+		Epic: map[int]StateInfo{
+			10: {Name: "Not Started", Type: "unstarted"},
+		},
 	}
 	if err := c.PutWorkflowStates(s); err != nil {
 		t.Fatal(err)
@@ -89,14 +94,18 @@ func TestWorkflowStates(t *testing.T) {
 	if !fresh {
 		t.Errorf("expected fresh")
 	}
-	if got.Story[1] != "Backlog" || got.Epic[10] != "Not Started" {
-		t.Errorf("got %+v", got)
+	if got.Story[1].Name != "Backlog" || got.Story[1].Type != "backlog" {
+		t.Errorf("story[1] = %+v", got.Story[1])
+	}
+	if got.Epic[10].Name != "Not Started" || got.Epic[10].Type != "unstarted" {
+		t.Errorf("epic[10] = %+v", got.Epic[10])
 	}
 }
 
 func TestWorkflowStatesStale(t *testing.T) {
 	c := &Cache{Dir: t.TempDir(), TTL: time.Hour, WorkflowTTL: time.Nanosecond}
-	if err := c.PutWorkflowStates(&WorkflowStates{Story: map[int]string{1: "x"}}); err != nil {
+	s := &WorkflowStates{Story: map[int]StateInfo{1: {Name: "x"}}}
+	if err := c.PutWorkflowStates(s); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(2 * time.Nanosecond)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/justincampbell/shortcut-statusline/internal/branch"
 	"github.com/justincampbell/shortcut-statusline/internal/cache"
+	"github.com/justincampbell/shortcut-statusline/internal/color"
 	"github.com/justincampbell/shortcut-statusline/internal/config"
 	"github.com/justincampbell/shortcut-statusline/internal/format"
 	"github.com/justincampbell/shortcut-statusline/internal/osc8"
@@ -20,14 +21,16 @@ import (
 
 var version = "dev"
 
-const formatHelp = "Format string. Tokens: {story.name|id|url|state}, {epic.name|id|url|state}, {objective.name|id|url|state}"
+const formatHelp = "Format string. Tokens: {story.name|id|idName|url|state}, {epic.name|id|idName|url|state}, {objective.name|id|idName|url|state}"
 
 func main() {
-	formatFlag := flag.String("format", "{story.name}", formatHelp)
-	flag.StringVar(formatFlag, "f", "{story.name}", "Format string (shorthand)")
+	const defaultFormat = "{story.idName} ({epic.idName})"
+	formatFlag := flag.String("format", defaultFormat, formatHelp)
+	flag.StringVar(formatFlag, "f", defaultFormat, "Format string (shorthand)")
 	noCacheFlag := flag.Bool("no-cache", false, "Bypass the on-disk cache")
 	refreshFlag := flag.Bool("refresh", false, "Clear cache for the current branch and refetch")
 	noLinksFlag := flag.Bool("no-links", false, "Disable OSC8 hyperlinks regardless of terminal detection")
+	noColorFlag := flag.Bool("no-color", false, "Disable ANSI color regardless of environment")
 	versionFlag := flag.Bool("version", false, "Show version")
 	flag.BoolVar(versionFlag, "v", false, "Show version (shorthand)")
 	flag.Parse()
@@ -38,13 +41,14 @@ func main() {
 	}
 
 	links := osc8.Enabled() && !*noLinksFlag
-	if err := run(*formatFlag, *noCacheFlag, *refreshFlag, links); err != nil {
+	colors := color.Enabled() && !*noColorFlag
+	if err := run(*formatFlag, *noCacheFlag, *refreshFlag, links, colors); err != nil {
 		// Quiet failure: log to stderr but exit 0 so the statusline keeps moving.
 		fmt.Fprintln(os.Stderr, "shortcut-statusline:", err)
 	}
 }
 
-func run(formatStr string, noCache, refresh, links bool) error {
+func run(formatStr string, noCache, refresh, links, colors bool) error {
 	br, err := branch.Current()
 	if err != nil {
 		// Not in a repo, detached HEAD, etc. — print nothing, succeed.
@@ -59,8 +63,11 @@ func run(formatStr string, noCache, refresh, links bool) error {
 	namespaces := format.Namespaces(formatStr)
 	wantEpic := namespaces[format.NSEpic] || namespaces[format.NSObjective]
 	wantObj := namespaces[format.NSObjective]
-	wantStoryState := format.HasField(formatStr, format.NSStory, "state")
-	wantEpicState := format.HasField(formatStr, format.NSEpic, "state")
+	// Color wraps the namespace's name/id by its workflow state, so any
+	// referenced namespace needs its state fetched even when {.state} isn't
+	// in the format.
+	wantStoryState := format.HasField(formatStr, format.NSStory, "state") || (colors && namespaces[format.NSStory])
+	wantEpicState := format.HasField(formatStr, format.NSEpic, "state") || (colors && namespaces[format.NSEpic])
 	if wantEpicState {
 		wantEpic = true
 	}
@@ -103,7 +110,7 @@ func run(formatStr string, noCache, refresh, links bool) error {
 		}
 	}
 
-	out, err := format.Render(formatStr, makeResolver(bundle, links))
+	out, err := format.Render(formatStr, makeResolver(bundle, links, colors))
 	if err != nil {
 		return err
 	}
@@ -121,10 +128,13 @@ func hasNeededData(b *cache.Bundle, wantEpic, wantObj, wantStoryState, wantEpicS
 	if wantObj && b.Epic != nil && b.Epic.MilestoneID != nil && b.Objective == nil {
 		return false
 	}
-	if wantStoryState && b.StoryState == "" {
+	// StoryStateType / EpicStateType are populated together with the state
+	// names; if the cache predates that field, force a refetch so colors
+	// work after an upgrade.
+	if wantStoryState && (b.StoryState == "" || b.StoryStateType == "") {
 		return false
 	}
-	if wantEpicState && b.Epic != nil && b.EpicState == "" {
+	if wantEpicState && b.Epic != nil && (b.EpicState == "" || b.EpicStateType == "") {
 		return false
 	}
 	return true
@@ -166,10 +176,14 @@ func fetchBundle(c *cache.Cache, storyID int, wantEpic, wantObj, wantStoryState,
 			return nil, err
 		}
 		if wantStoryState && b.Story != nil {
-			b.StoryState = states.Story[b.Story.WorkflowStateID]
+			info := states.Story[b.Story.WorkflowStateID]
+			b.StoryState = info.Name
+			b.StoryStateType = info.Type
 		}
 		if wantEpicState && b.Epic != nil {
-			b.EpicState = states.Epic[b.Epic.EpicStateID]
+			info := states.Epic[b.Epic.EpicStateID]
+			b.EpicState = info.Name
+			b.EpicStateType = info.Type
 		}
 	}
 
@@ -195,16 +209,16 @@ func loadWorkflowStates(ctx context.Context, c *cache.Cache, client *shortcut.Cl
 	}
 
 	s := &cache.WorkflowStates{
-		Story: map[int]string{},
-		Epic:  map[int]string{},
+		Story: map[int]cache.StateInfo{},
+		Epic:  map[int]cache.StateInfo{},
 	}
 	for _, w := range wfs {
 		for _, st := range w.States {
-			s.Story[st.ID] = st.Name
+			s.Story[st.ID] = cache.StateInfo{Name: st.Name, Type: st.Type}
 		}
 	}
 	for _, st := range ew.EpicStates {
-		s.Epic[st.ID] = st.Name
+		s.Epic[st.ID] = cache.StateInfo{Name: st.Name, Type: st.Type}
 	}
 	if err := c.PutWorkflowStates(s); err != nil {
 		fmt.Fprintln(os.Stderr, "shortcut-statusline: workflow cache write:", err)
@@ -212,76 +226,97 @@ func loadWorkflowStates(ctx context.Context, c *cache.Cache, client *shortcut.Cl
 	return s, nil
 }
 
-func makeResolver(b *cache.Bundle, links bool) format.Resolver {
+func makeResolver(b *cache.Bundle, links, colors bool) format.Resolver {
 	return func(ns, field string) (string, error) {
 		switch ns {
 		case format.NSStory:
-			return storyField(b, field, links)
+			return storyField(b, field, links, colors)
 		case format.NSEpic:
-			return epicField(b, field, links)
+			return epicField(b, field, links, colors)
 		case format.NSObjective:
-			return objectiveField(b.Objective, field, links)
+			return objectiveField(b.Objective, field, links, colors)
 		}
 		return "", errors.New("unknown namespace " + ns)
 	}
 }
 
-func storyField(b *cache.Bundle, field string, links bool) (string, error) {
+func storyField(b *cache.Bundle, field string, links, colors bool) (string, error) {
 	if b.Story == nil {
 		return "", nil
 	}
 	s := b.Story
+	c := ""
+	if colors {
+		c = color.ForStateType(b.StoryStateType)
+	}
 	switch field {
 	case "name":
-		return link(s.Name, s.AppURL, links), nil
+		return decorate(s.Name, s.AppURL, c, links), nil
 	case "id":
-		return link(strconv.Itoa(s.ID), s.AppURL, links), nil
+		return decorate(strconv.Itoa(s.ID), s.AppURL, c, links), nil
+	case "idName":
+		return decorate(strconv.Itoa(s.ID)+": "+s.Name, s.AppURL, c, links), nil
 	case "url":
 		return s.AppURL, nil
 	case "state":
-		return b.StoryState, nil
+		return color.Wrap(b.StoryState, c), nil
 	}
 	return "", fmt.Errorf("unknown field story.%s", field)
 }
 
-func epicField(b *cache.Bundle, field string, links bool) (string, error) {
+func epicField(b *cache.Bundle, field string, links, colors bool) (string, error) {
 	if b.Epic == nil {
 		return "", nil
 	}
 	e := b.Epic
+	c := ""
+	if colors {
+		c = color.ForStateType(b.EpicStateType)
+	}
 	switch field {
 	case "name":
-		return link(e.Name, e.AppURL, links), nil
+		return decorate(e.Name, e.AppURL, c, links), nil
 	case "id":
-		return link(strconv.Itoa(e.ID), e.AppURL, links), nil
+		return decorate(strconv.Itoa(e.ID), e.AppURL, c, links), nil
+	case "idName":
+		return decorate(strconv.Itoa(e.ID)+": "+e.Name, e.AppURL, c, links), nil
 	case "url":
 		return e.AppURL, nil
 	case "state":
-		return b.EpicState, nil
+		return color.Wrap(b.EpicState, c), nil
 	}
 	return "", fmt.Errorf("unknown field epic.%s", field)
 }
 
-func objectiveField(o *shortcut.Objective, field string, links bool) (string, error) {
+func objectiveField(o *shortcut.Objective, field string, links, colors bool) (string, error) {
 	if o == nil {
 		return "", nil
 	}
+	c := ""
+	if colors {
+		c = color.ForObjectiveState(o.State)
+	}
 	switch field {
 	case "name":
-		return link(o.Name, o.AppURL, links), nil
+		return decorate(o.Name, o.AppURL, c, links), nil
 	case "id":
-		return link(strconv.Itoa(o.ID), o.AppURL, links), nil
+		return decorate(strconv.Itoa(o.ID), o.AppURL, c, links), nil
+	case "idName":
+		return decorate(strconv.Itoa(o.ID)+": "+o.Name, o.AppURL, c, links), nil
 	case "url":
 		return o.AppURL, nil
 	case "state":
-		return o.State, nil
+		return color.Wrap(o.State, c), nil
 	}
 	return "", fmt.Errorf("unknown field objective.%s", field)
 }
 
-func link(text, url string, enabled bool) string {
-	if !enabled {
-		return text
+// decorate wraps text in an OSC8 link (if links enabled and url present),
+// then in an SGR color (if colors enabled and code present). Color sits
+// outside the hyperlink so terminals render the visible text colored.
+func decorate(text, url, colorCode string, links bool) string {
+	if links {
+		text = osc8.Wrap(text, url)
 	}
-	return osc8.Wrap(text, url)
+	return color.Wrap(text, colorCode)
 }

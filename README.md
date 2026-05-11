@@ -30,10 +30,15 @@ go install github.com/justincampbell/shortcut-statusline@latest
 ## Usage
 
 ```sh
+shortcut-statusline                                  # default: {story.idName} ({epic.idName})
 shortcut-statusline -f '{story.name}'
 shortcut-statusline -f '{story.name} • {epic.name} • {objective.name}'
 shortcut-statusline -f '[{story.id}] {story.name}'
 ```
+
+Empty enclosures (`()`, `[]`, `{}`) left by missing values are stripped from
+the output, so the default format renders as `12345: Story Name` for a
+story without an epic.
 
 If the branch has no `sc-NNNNN` in it, or you're outside a git repo, the
 command prints nothing and exits 0. Same on network errors: a stale cache is
@@ -41,20 +46,23 @@ used if available, otherwise nothing is printed — the prompt is never blocked.
 
 ### Tokens
 
-| Token              | Value                          |
-|--------------------|--------------------------------|
-| `{story.name}`     | Story title                    |
-| `{story.id}`       | Numeric ID                     |
-| `{story.url}`      | App URL                        |
-| `{story.state}`    | Workflow state name (e.g. "In Development") |
-| `{epic.name}`      | Epic title                     |
-| `{epic.id}`        | Epic ID                        |
-| `{epic.url}`       | Epic app URL                   |
-| `{epic.state}`     | Epic state name (e.g. "In Progress") |
-| `{objective.name}` | Objective (milestone) title    |
-| `{objective.id}`   | Objective ID                   |
-| `{objective.url}`  | Objective app URL              |
-| `{objective.state}` | Objective state (e.g. "in progress") |
+| Token                | Value                          |
+|----------------------|--------------------------------|
+| `{story.name}`       | Story title                    |
+| `{story.id}`         | Numeric ID                     |
+| `{story.idName}`     | `id: name` (e.g. `12345: Build the thing`) |
+| `{story.url}`        | App URL                        |
+| `{story.state}`      | Workflow state name (e.g. "In Development") |
+| `{epic.name}`        | Epic title                     |
+| `{epic.id}`          | Epic ID                        |
+| `{epic.idName}`      | `id: name`                     |
+| `{epic.url}`         | Epic app URL                   |
+| `{epic.state}`       | Epic state name (e.g. "In Progress") |
+| `{objective.name}`   | Objective (milestone) title    |
+| `{objective.id}`     | Objective ID                   |
+| `{objective.idName}` | `id: name`                     |
+| `{objective.url}`    | Objective app URL              |
+| `{objective.state}`  | Objective state (e.g. "in progress") |
 
 Epic and objective are only fetched if your format references them. State
 fields trigger a one-time workspace-wide workflow lookup, cached for 7 days
@@ -62,11 +70,26 @@ fields trigger a one-time workspace-wide workflow lookup, cached for 7 days
 
 ### Flags
 
-- `-f, --format <string>` — default `{story.name}`
+- `-f, --format <string>` — default `{story.idName} ({epic.idName})`
 - `--no-cache` — bypass cache (for debugging)
 - `--refresh` — clear cache for the current branch and refetch
 - `--no-links` — disable OSC8 hyperlinks
+- `--no-color` — disable ANSI color
 - `-v, --version` — print version
+
+### Color
+
+Name, id, idName, and state tokens are wrapped in an ANSI color reflecting
+the resource's workflow state, roughly matching Shortcut's web UI:
+
+| State type                 | Color   |
+|----------------------------|---------|
+| `backlog` / `unstarted` / `to do` | gray    |
+| `started` / `in progress` | magenta |
+| `done`                     | green   |
+
+On by default. Disable with `--no-color`, `SHORTCUT_STATUSLINE_NO_COLOR=1`,
+or `NO_COLOR` (any non-empty value, per [no-color.org](https://no-color.org/)).
 
 ### Hyperlinks (OSC8)
 
