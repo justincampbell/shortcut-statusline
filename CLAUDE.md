@@ -13,6 +13,12 @@ git branch (`sc-NNNNN`), fetches via the Shortcut API, caches per-branch.
 - `internal/cache` — per-branch JSON cache. Filename = SHA256(branch)[:16]. Atomic write via temp file + rename.
 - `internal/format` — `{ns.field}` tokenizer + renderer. Pre-pass `Namespaces()` tells main.go which resources to fetch (lazy).
 
+## Fields
+
+See `IMPLEMENTED.md` for the full per-resource checklist of fields that are
+exposed today and candidates worth adding next. Update it whenever a new
+token ships or a new field is considered.
+
 ## Invariants
 
 - **The statusline is hot.** Cache hits must stay <20ms. Network calls have a 3s timeout. Any error after-the-fact prefers stale cache > empty output > error. Never block a shell prompt.
