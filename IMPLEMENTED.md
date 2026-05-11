@@ -24,9 +24,9 @@ we already fetch.
 - [ ] `{story.pull_requests}` — count
 - [ ] `{story.blocked}` / `{story.blocker}` — booleans
 - [ ] `{story.archived}` — boolean
-- [ ] `{story.owner}` — needs `/members` lookup (UUIDs → mention_name)
-- [ ] `{story.requestor}` — needs `/members` lookup
-- [ ] `{story.team}` — `group_id`, needs `/groups` lookup
+- [x] `{story.owner}` — first owner's `mention_name` via `/members` lookup
+- [x] `{story.requestor}` — `mention_name` via `/members` lookup
+- [x] `{story.team}` — group `mention_name` via `/groups` lookup
 - [ ] `{story.iteration}` — `iteration_id`, needs `/iterations` lookup
 - [ ] `{story.labels}` — `labels[].name`, joined
 - [ ] `{story.priority}` / other custom fields — `custom_fields`
@@ -46,8 +46,8 @@ we already fetch.
 - [ ] `{epic.completed}` / `{epic.completed_at}`
 - [ ] `{epic.created_at}` / `{epic.updated_at}`
 - [ ] `{epic.archived}`
-- [ ] `{epic.owner}` — `owner_ids`, needs `/members` lookup
-- [ ] `{epic.team}` — `group_id`, needs `/groups` lookup
+- [x] `{epic.owner}` — first owner's `mention_name` via `/members` lookup
+- [x] `{epic.team}` — group `mention_name` via `/groups` lookup
 - [ ] `{epic.labels}` — `labels[].name`
 - [ ] `{epic.description}`
 
@@ -73,11 +73,10 @@ These aren't statusline subjects on their own, but unlock fields above:
 - **Iteration** (`/iterations/{id}`) — current sprint. Would expose
   `{story.iteration}` and possibly `{iteration.name|state|end_date}`. Lookup is
   per-iteration but very cacheable (iterations span weeks).
-- **Member** (`/members`) — workspace-wide list. One workspace-scoped fetch
-  unlocks `{story.owner}`, `{story.requestor}`, `{epic.owner}`. Same pattern as
-  the workflow-state lookup we already have: long TTL, separate cache file.
-- **Group / Team** (`/groups`) — workspace-wide list. Unlocks
-  `{story.team}` / `{epic.team}`. Same cacheable-once pattern as Member.
+- **Member** (`/members`) — already implemented; cached in `members.json` at
+  the workflow TTL.
+- **Group / Team** (`/groups`) — already implemented; cached in
+  `groups.json` at the workflow TTL.
 - **Workflow / Epic Workflow** — already implemented (used for state name).
 - **Label** — already on stories/epics inline (`labels[].name`); no separate
   fetch needed.

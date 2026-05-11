@@ -109,6 +109,46 @@ func TestGetEpicWorkflow(t *testing.T) {
 	}
 }
 
+func TestGetMembers(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/members", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{"id":"u1","profile":{"mention_name":"alice","name":"Alice","email_address":"a@x"},"disabled":false}]`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New("tok")
+	c.BaseURL = srv.URL
+
+	ms, err := c.GetMembers(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ms) != 1 || ms[0].Profile.MentionName != "alice" || ms[0].Profile.Name != "Alice" {
+		t.Errorf("got %+v", ms)
+	}
+}
+
+func TestGetGroups(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/groups", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[{"id":"g1","name":"Platform","mention_name":"platform","archived":false}]`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New("tok")
+	c.BaseURL = srv.URL
+
+	gs, err := c.GetGroups(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gs) != 1 || gs[0].MentionName != "platform" {
+		t.Errorf("got %+v", gs)
+	}
+}
+
 func TestGetObjective(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/objectives/99", func(w http.ResponseWriter, _ *http.Request) {

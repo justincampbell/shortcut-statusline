@@ -118,6 +118,76 @@ func TestWorkflowStatesStale(t *testing.T) {
 	}
 }
 
+func TestPutStampsSchemaVersion(t *testing.T) {
+	c := &Cache{Dir: t.TempDir(), TTL: time.Hour}
+	b := &Bundle{Story: &shortcut.Story{ID: 1}}
+	if b.SchemaVersion != 0 {
+		t.Fatalf("precondition: unstamped bundle should be version 0")
+	}
+	if err := c.Put("b", b); err != nil {
+		t.Fatal(err)
+	}
+	if b.SchemaVersion != BundleSchemaVersion {
+		t.Errorf("Put should stamp SchemaVersion; got %d want %d", b.SchemaVersion, BundleSchemaVersion)
+	}
+	got, _, err := c.Get("b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SchemaVersion != BundleSchemaVersion {
+		t.Errorf("Get returned SchemaVersion=%d, want %d", got.SchemaVersion, BundleSchemaVersion)
+	}
+}
+
+func TestMembers(t *testing.T) {
+	c := &Cache{Dir: t.TempDir(), TTL: time.Hour, WorkflowTTL: time.Hour}
+	m := &Members{Members: map[string]MemberInfo{
+		"u1": {MentionName: "alice", Name: "Alice"},
+	}}
+	if err := c.PutMembers(m); err != nil {
+		t.Fatal(err)
+	}
+	got, fresh, err := c.GetMembers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fresh || got == nil || got.Members["u1"].MentionName != "alice" {
+		t.Errorf("got=%+v fresh=%v", got, fresh)
+	}
+}
+
+func TestGroups(t *testing.T) {
+	c := &Cache{Dir: t.TempDir(), TTL: time.Hour, WorkflowTTL: time.Hour}
+	g := &Groups{Groups: map[string]GroupInfo{
+		"g1": {MentionName: "platform", Name: "Platform"},
+	}}
+	if err := c.PutGroups(g); err != nil {
+		t.Fatal(err)
+	}
+	got, fresh, err := c.GetGroups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fresh || got == nil || got.Groups["g1"].MentionName != "platform" {
+		t.Errorf("got=%+v fresh=%v", got, fresh)
+	}
+}
+
+func TestMembersStale(t *testing.T) {
+	c := &Cache{Dir: t.TempDir(), TTL: time.Hour, WorkflowTTL: time.Nanosecond}
+	if err := c.PutMembers(&Members{Members: map[string]MemberInfo{"u1": {Name: "X"}}}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Nanosecond)
+	got, fresh, err := c.GetMembers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || fresh {
+		t.Errorf("expected stale present, got=%v fresh=%v", got, fresh)
+	}
+}
+
 func TestSlashesInBranchName(t *testing.T) {
 	c := &Cache{Dir: t.TempDir(), TTL: time.Hour}
 	branch := "feature/sc-12345/with-extra-slashes"

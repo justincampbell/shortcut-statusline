@@ -17,12 +17,20 @@ import (
 // DefaultTTL is how long a cached bundle is considered fresh.
 const DefaultTTL = time.Hour
 
-// DefaultWorkflowTTL is how long cached workflow state lookups are considered
-// fresh. Workflows change rarely, so this is much longer than the bundle TTL.
+// DefaultWorkflowTTL is how long cached workspace-wide lookups (workflows,
+// members, groups) are considered fresh. These change rarely, so this is
+// much longer than the bundle TTL.
 const DefaultWorkflowTTL = 7 * 24 * time.Hour
+
+// BundleSchemaVersion is bumped whenever Bundle gains a derived field that
+// can't be populated from an older cached payload. A cached bundle with a
+// lower SchemaVersion is treated as needing a refetch even when otherwise
+// fresh — see hasNeededData in main.go.
+const BundleSchemaVersion = 2
 
 // Bundle is the cached set of resources for one branch.
 type Bundle struct {
+	SchemaVersion  int                 `json:"schema_version,omitempty"`
 	FetchedAt      int64               `json:"fetched_at"`
 	Story          *shortcut.Story     `json:"story,omitempty"`
 	Epic           *shortcut.Epic      `json:"epic,omitempty"`
@@ -31,6 +39,11 @@ type Bundle struct {
 	StoryStateType string              `json:"story_state_type,omitempty"`
 	EpicState      string              `json:"epic_state,omitempty"`
 	EpicStateType  string              `json:"epic_state_type,omitempty"`
+	StoryOwner     string              `json:"story_owner,omitempty"`
+	StoryRequestor string              `json:"story_requestor,omitempty"`
+	StoryTeam      string              `json:"story_team,omitempty"`
+	EpicOwner      string              `json:"epic_owner,omitempty"`
+	EpicTeam       string              `json:"epic_team,omitempty"`
 }
 
 // StateInfo is the cached name+type for a single workflow state.
@@ -47,6 +60,32 @@ type WorkflowStates struct {
 	Epic      map[int]StateInfo `json:"epic,omitempty"`
 }
 
+// MemberInfo is the cached display name(s) for a single workspace member.
+// MentionName is preferred for rendering; Name is a fallback when
+// MentionName is unset.
+type MemberInfo struct {
+	MentionName string `json:"mention_name,omitempty"`
+	Name        string `json:"name,omitempty"`
+}
+
+// Members is the cached id→MemberInfo lookup for the whole workspace.
+type Members struct {
+	FetchedAt int64                 `json:"fetched_at"`
+	Members   map[string]MemberInfo `json:"members,omitempty"`
+}
+
+// GroupInfo is the cached display name(s) for a single workspace group/team.
+type GroupInfo struct {
+	MentionName string `json:"mention_name,omitempty"`
+	Name        string `json:"name,omitempty"`
+}
+
+// Groups is the cached id→GroupInfo lookup for the whole workspace.
+type Groups struct {
+	FetchedAt int64                `json:"fetched_at"`
+	Groups    map[string]GroupInfo `json:"groups,omitempty"`
+}
+
 // Cache is a per-user filesystem cache.
 type Cache struct {
 	Dir         string
@@ -54,7 +93,11 @@ type Cache struct {
 	WorkflowTTL time.Duration
 }
 
-const workflowFile = "workflows.json"
+const (
+	workflowFile = "workflows.json"
+	membersFile  = "members.json"
+	groupsFile   = "groups.json"
+)
 
 // New returns a Cache rooted at ~/.cache/shortcut-statusline (or
 // $XDG_CACHE_HOME equivalent).
@@ -106,17 +149,23 @@ func (c *Cache) Get(branch string) (b *Bundle, fresh bool, err error) {
 	return b, age < c.TTL, nil
 }
 
-// Put writes b to the cache for branch, stamping FetchedAt to now.
+// Put writes b to the cache for branch, stamping FetchedAt + SchemaVersion.
 func (c *Cache) Put(branch string, b *Bundle) error {
+	b.FetchedAt = time.Now().Unix()
+	b.SchemaVersion = BundleSchemaVersion
+	return c.writeAtomic(c.path(branch), b)
+}
+
+// writeAtomic marshals v to JSON and replaces path via a temp+rename in the
+// same directory, so a reader never sees a half-written file.
+func (c *Cache) writeAtomic(path string, v any) error {
 	if err := os.MkdirAll(c.Dir, 0o755); err != nil {
 		return err
 	}
-	b.FetchedAt = time.Now().Unix()
-	data, err := json.Marshal(b)
+	data, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	final := c.path(branch)
 	tmp, err := os.CreateTemp(c.Dir, ".tmp-*")
 	if err != nil {
 		return err
@@ -133,7 +182,7 @@ func (c *Cache) Put(branch string, b *Bundle) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(tmpName, final); err != nil {
+	if err := os.Rename(tmpName, path); err != nil {
 		return fmt.Errorf("rename cache: %w", err)
 	}
 	return nil
@@ -168,30 +217,52 @@ func (c *Cache) GetWorkflowStates() (s *WorkflowStates, fresh bool, err error) {
 
 // PutWorkflowStates writes the id→name maps, atomic via temp+rename.
 func (c *Cache) PutWorkflowStates(s *WorkflowStates) error {
-	if err := os.MkdirAll(c.Dir, 0o755); err != nil {
-		return err
-	}
 	s.FetchedAt = time.Now().Unix()
-	data, err := json.Marshal(s)
+	return c.writeAtomic(filepath.Join(c.Dir, workflowFile), s)
+}
+
+// GetMembers returns the cached id→MemberInfo map and whether it is fresh.
+func (c *Cache) GetMembers() (m *Members, fresh bool, err error) {
+	data, err := os.ReadFile(filepath.Join(c.Dir, membersFile))
 	if err != nil {
-		return err
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
 	}
-	final := filepath.Join(c.Dir, workflowFile)
-	tmp, err := os.CreateTemp(c.Dir, ".tmp-*")
+	m = &Members{}
+	if err := json.Unmarshal(data, m); err != nil {
+		return nil, false, err
+	}
+	age := time.Since(time.Unix(m.FetchedAt, 0))
+	return m, age < c.WorkflowTTL, nil
+}
+
+// PutMembers writes the id→MemberInfo map, atomic via temp+rename.
+func (c *Cache) PutMembers(m *Members) error {
+	m.FetchedAt = time.Now().Unix()
+	return c.writeAtomic(filepath.Join(c.Dir, membersFile), m)
+}
+
+// GetGroups returns the cached id→GroupInfo map and whether it is fresh.
+func (c *Cache) GetGroups() (g *Groups, fresh bool, err error) {
+	data, err := os.ReadFile(filepath.Join(c.Dir, groupsFile))
 	if err != nil {
-		return err
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
 	}
-	tmpName := tmp.Name()
-	defer func() { _ = os.Remove(tmpName) }()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
+	g = &Groups{}
+	if err := json.Unmarshal(data, g); err != nil {
+		return nil, false, err
 	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpName, final); err != nil {
-		return fmt.Errorf("rename workflow cache: %w", err)
-	}
-	return nil
+	age := time.Since(time.Unix(g.FetchedAt, 0))
+	return g, age < c.WorkflowTTL, nil
+}
+
+// PutGroups writes the id→GroupInfo map, atomic via temp+rename.
+func (c *Cache) PutGroups(g *Groups) error {
+	g.FetchedAt = time.Now().Unix()
+	return c.writeAtomic(filepath.Join(c.Dir, groupsFile), g)
 }

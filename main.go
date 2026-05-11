@@ -21,7 +21,7 @@ import (
 
 var version = "dev"
 
-const formatHelp = "Format string. Tokens: {story.name|id|idName|url|state|type}, {epic.name|id|idName|url|state}, {objective.name|id|idName|url|state}"
+const formatHelp = "Format string. Tokens: {story.name|id|idName|url|state|type|owner|requestor|team}, {epic.name|id|idName|url|state|owner|team}, {objective.name|id|idName|url|state}"
 
 func main() {
 	const defaultFormat = "{story.idName} ({epic.idName})"
@@ -60,18 +60,7 @@ func run(formatStr string, noCache, refresh, links, colors bool) error {
 		return nil
 	}
 
-	namespaces := format.Namespaces(formatStr)
-	wantEpic := namespaces[format.NSEpic] || namespaces[format.NSObjective]
-	wantObj := namespaces[format.NSObjective]
-	// Color wraps the namespace's name/id by its workflow state, so any
-	// referenced namespace needs its state fetched even when {.state} isn't
-	// in the format.
-	wantStoryState := format.HasField(formatStr, format.NSStory, "state") || (colors && namespaces[format.NSStory])
-	wantEpicState := format.HasField(formatStr, format.NSEpic, "state") || (colors && namespaces[format.NSEpic])
-	wantStoryType := format.HasField(formatStr, format.NSStory, "type")
-	if wantEpicState {
-		wantEpic = true
-	}
+	w := wantsFor(formatStr, colors)
 
 	c, err := cache.New()
 	if err != nil {
@@ -86,14 +75,14 @@ func run(formatStr string, noCache, refresh, links, colors bool) error {
 	if !noCache && !refresh {
 		b, fresh, err := c.Get(br)
 		if err == nil && fresh && b != nil && b.Story != nil && b.Story.ID == storyID {
-			if hasNeededData(b, wantEpic, wantObj, wantStoryState, wantEpicState, wantStoryType) {
+			if hasNeededData(b, w) {
 				bundle = b
 			}
 		}
 	}
 
 	if bundle == nil {
-		fetched, fetchErr := fetchBundle(c, storyID, wantEpic, wantObj, wantStoryState, wantEpicState, noCache, refresh)
+		fetched, fetchErr := fetchBundle(c, storyID, w, noCache, refresh)
 		if fetchErr != nil {
 			// On API failure, fall back to stale cache.
 			if stale, _, err := c.Get(br); err == nil && stale != nil && stale.Story != nil && stale.Story.ID == storyID {
@@ -122,31 +111,68 @@ func run(formatStr string, noCache, refresh, links, colors bool) error {
 	return nil
 }
 
-func hasNeededData(b *cache.Bundle, wantEpic, wantObj, wantStoryState, wantEpicState, wantStoryType bool) bool {
-	if wantEpic && b.Story != nil && b.Story.EpicID != nil && b.Epic == nil {
+// wants captures which optional resources / derived fields the format
+// string and color setting require. It's the single argument threaded
+// through cache-freshness and fetch logic so neither call site has to
+// juggle six positional booleans.
+type wants struct {
+	Epic, Obj                       bool
+	StoryState, EpicState           bool
+	StoryType                       bool
+	StoryOwner, EpicOwner           bool
+	StoryRequestor                  bool
+	StoryTeam, EpicTeam             bool
+}
+
+func wantsFor(formatStr string, colors bool) wants {
+	namespaces := format.Namespaces(formatStr)
+	w := wants{
+		Epic: namespaces[format.NSEpic] || namespaces[format.NSObjective],
+		Obj:  namespaces[format.NSObjective],
+		// Color wraps the namespace's name/id by its workflow state, so any
+		// referenced namespace needs its state fetched even when {.state}
+		// isn't in the format.
+		StoryState:     format.HasField(formatStr, format.NSStory, "state") || (colors && namespaces[format.NSStory]),
+		EpicState:      format.HasField(formatStr, format.NSEpic, "state") || (colors && namespaces[format.NSEpic]),
+		StoryType:      format.HasField(formatStr, format.NSStory, "type"),
+		StoryOwner:     format.HasField(formatStr, format.NSStory, "owner"),
+		StoryRequestor: format.HasField(formatStr, format.NSStory, "requestor"),
+		StoryTeam:      format.HasField(formatStr, format.NSStory, "team"),
+		EpicOwner:      format.HasField(formatStr, format.NSEpic, "owner"),
+		EpicTeam:       format.HasField(formatStr, format.NSEpic, "team"),
+	}
+	if w.EpicState || w.EpicOwner || w.EpicTeam {
+		w.Epic = true
+	}
+	return w
+}
+
+func (w wants) members() bool { return w.StoryOwner || w.EpicOwner || w.StoryRequestor }
+func (w wants) groups() bool  { return w.StoryTeam || w.EpicTeam }
+
+func hasNeededData(b *cache.Bundle, w wants) bool {
+	// A cached bundle written before a derived field was introduced will
+	// still pass the per-field checks below but render the new field
+	// empty. The schema version forces a refetch on upgrade.
+	if b.SchemaVersion < cache.BundleSchemaVersion {
 		return false
 	}
-	if wantObj && b.Epic != nil && b.Epic.MilestoneID != nil && b.Objective == nil {
+	if w.Epic && b.Story != nil && b.Story.EpicID != nil && b.Epic == nil {
 		return false
 	}
-	// StoryStateType / EpicStateType are populated together with the state
-	// names; if the cache predates that field, force a refetch so colors
-	// work after an upgrade.
-	if wantStoryState && (b.StoryState == "" || b.StoryStateType == "") {
+	if w.Obj && b.Epic != nil && b.Epic.MilestoneID != nil && b.Objective == nil {
 		return false
 	}
-	if wantEpicState && b.Epic != nil && (b.EpicState == "" || b.EpicStateType == "") {
+	if w.StoryState && (b.StoryState == "" || b.StoryStateType == "") {
 		return false
 	}
-	// story_type is always set on a live story; an empty value means the
-	// cache predates the field, so refetch when the format needs it.
-	if wantStoryType && b.Story != nil && b.Story.Type == "" {
+	if w.EpicState && b.Epic != nil && (b.EpicState == "" || b.EpicStateType == "") {
 		return false
 	}
 	return true
 }
 
-func fetchBundle(c *cache.Cache, storyID int, wantEpic, wantObj, wantStoryState, wantEpicState, noCache, refresh bool) (*cache.Bundle, error) {
+func fetchBundle(c *cache.Cache, storyID int, w wants, noCache, refresh bool) (*cache.Bundle, error) {
 	token, err := config.Token()
 	if err != nil {
 		return nil, err
@@ -160,14 +186,14 @@ func fetchBundle(c *cache.Cache, storyID int, wantEpic, wantObj, wantStoryState,
 	}
 	b := &cache.Bundle{Story: story}
 
-	if wantEpic && story.EpicID != nil {
+	if w.Epic && story.EpicID != nil {
 		epic, err := client.GetEpic(ctx, *story.EpicID)
 		if err != nil {
 			return nil, err
 		}
 		b.Epic = epic
 
-		if wantObj && epic.MilestoneID != nil {
+		if w.Obj && epic.MilestoneID != nil {
 			obj, err := client.GetObjective(ctx, *epic.MilestoneID)
 			if err != nil {
 				return nil, err
@@ -176,24 +202,76 @@ func fetchBundle(c *cache.Cache, storyID int, wantEpic, wantObj, wantStoryState,
 		}
 	}
 
-	if wantStoryState || wantEpicState {
-		states, err := loadWorkflowStates(ctx, c, client, noCache || refresh)
+	force := noCache || refresh
+
+	if w.StoryState || w.EpicState {
+		states, err := loadWorkflowStates(ctx, c, client, force)
 		if err != nil {
 			return nil, err
 		}
-		if wantStoryState && b.Story != nil {
+		if w.StoryState && b.Story != nil {
 			info := states.Story[b.Story.WorkflowStateID]
 			b.StoryState = info.Name
 			b.StoryStateType = info.Type
 		}
-		if wantEpicState && b.Epic != nil {
+		if w.EpicState && b.Epic != nil {
 			info := states.Epic[b.Epic.EpicStateID]
 			b.EpicState = info.Name
 			b.EpicStateType = info.Type
 		}
 	}
 
+	if w.members() {
+		members, err := loadMembers(ctx, c, client, force)
+		if err != nil {
+			return nil, err
+		}
+		if w.StoryOwner {
+			b.StoryOwner = firstOwnerName(b.Story.OwnerIDs, members)
+		}
+		if w.StoryRequestor && b.Story.RequestedByID != "" {
+			b.StoryRequestor = memberLabel(members[b.Story.RequestedByID])
+		}
+		if w.EpicOwner && b.Epic != nil {
+			b.EpicOwner = firstOwnerName(b.Epic.OwnerIDs, members)
+		}
+	}
+
+	if w.groups() {
+		groups, err := loadGroups(ctx, c, client, force)
+		if err != nil {
+			return nil, err
+		}
+		if w.StoryTeam && b.Story.GroupID != nil {
+			b.StoryTeam = groupLabel(groups[*b.Story.GroupID])
+		}
+		if w.EpicTeam && b.Epic != nil && b.Epic.GroupID != nil {
+			b.EpicTeam = groupLabel(groups[*b.Epic.GroupID])
+		}
+	}
+
 	return b, nil
+}
+
+func firstOwnerName(ids []string, members map[string]cache.MemberInfo) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	return memberLabel(members[ids[0]])
+}
+
+func memberLabel(m cache.MemberInfo) string {
+	if m.MentionName != "" {
+		return m.MentionName
+	}
+	return m.Name
+}
+
+func groupLabel(g cache.GroupInfo) string {
+	if g.MentionName != "" {
+		return g.MentionName
+	}
+	return g.Name
 }
 
 // loadWorkflowStates returns the workflow + epic state lookup maps, using a
@@ -230,6 +308,51 @@ func loadWorkflowStates(ctx context.Context, c *cache.Cache, client *shortcut.Cl
 		fmt.Fprintln(os.Stderr, "shortcut-statusline: workflow cache write:", err)
 	}
 	return s, nil
+}
+
+// loadMembers returns the id→member lookup, using a long-TTL on-disk cache.
+// Force=true skips the cache. Resolved label is just the cached MemberInfo;
+// callers pick mention_name vs. name via memberLabel.
+func loadMembers(ctx context.Context, c *cache.Cache, client *shortcut.Client, force bool) (map[string]cache.MemberInfo, error) {
+	if !force {
+		if m, fresh, err := c.GetMembers(); err == nil && fresh && m != nil {
+			return m.Members, nil
+		}
+	}
+	members, err := client.GetMembers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]cache.MemberInfo, len(members))
+	for _, m := range members {
+		out[m.ID] = cache.MemberInfo{MentionName: m.Profile.MentionName, Name: m.Profile.Name}
+	}
+	if err := c.PutMembers(&cache.Members{Members: out}); err != nil {
+		fmt.Fprintln(os.Stderr, "shortcut-statusline: members cache write:", err)
+	}
+	return out, nil
+}
+
+// loadGroups returns the id→group lookup, using a long-TTL on-disk cache.
+// Force=true skips the cache.
+func loadGroups(ctx context.Context, c *cache.Cache, client *shortcut.Client, force bool) (map[string]cache.GroupInfo, error) {
+	if !force {
+		if g, fresh, err := c.GetGroups(); err == nil && fresh && g != nil {
+			return g.Groups, nil
+		}
+	}
+	groups, err := client.GetGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]cache.GroupInfo, len(groups))
+	for _, g := range groups {
+		out[g.ID] = cache.GroupInfo{MentionName: g.MentionName, Name: g.Name}
+	}
+	if err := c.PutGroups(&cache.Groups{Groups: out}); err != nil {
+		fmt.Fprintln(os.Stderr, "shortcut-statusline: groups cache write:", err)
+	}
+	return out, nil
 }
 
 func makeResolver(b *cache.Bundle, links, colors bool) format.Resolver {
@@ -272,6 +395,12 @@ func storyField(b *cache.Bundle, field string, links, colors bool) (string, erro
 			tc = color.ForStoryType(s.Type)
 		}
 		return color.Wrap(s.Type, tc), nil
+	case "owner":
+		return b.StoryOwner, nil
+	case "requestor":
+		return b.StoryRequestor, nil
+	case "team":
+		return b.StoryTeam, nil
 	}
 	return "", fmt.Errorf("unknown field story.%s", field)
 }
@@ -296,6 +425,10 @@ func epicField(b *cache.Bundle, field string, links, colors bool) (string, error
 		return e.AppURL, nil
 	case "state":
 		return color.Wrap(b.EpicState, c), nil
+	case "owner":
+		return b.EpicOwner, nil
+	case "team":
+		return b.EpicTeam, nil
 	}
 	return "", fmt.Errorf("unknown field epic.%s", field)
 }

@@ -77,6 +77,24 @@ func (c *Client) GetEpicWorkflow(ctx context.Context) (*EpicWorkflow, error) {
 	return &ew, nil
 }
 
+// GetMembers lists every workspace member.
+func (c *Client) GetMembers(ctx context.Context) ([]Member, error) {
+	var ms []Member
+	if err := c.get(ctx, "/members", &ms); err != nil {
+		return nil, err
+	}
+	return ms, nil
+}
+
+// GetGroups lists every workspace group (team).
+func (c *Client) GetGroups(ctx context.Context) ([]Group, error) {
+	var gs []Group
+	if err := c.get(ctx, "/groups", &gs); err != nil {
+		return nil, err
+	}
+	return gs, nil
+}
+
 func (c *Client) get(ctx context.Context, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
 	if err != nil {

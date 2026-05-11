@@ -54,20 +54,26 @@ used if available, otherwise nothing is printed — the prompt is never blocked.
 | `{story.url}`        | App URL                        |
 | `{story.state}`      | Workflow state name (e.g. "In Development") |
 | `{story.type}`       | `feature` / `bug` / `chore`    |
+| `{story.owner}`      | First owner's mention name (e.g. `alice`) |
+| `{story.requestor}`  | Requestor's mention name       |
+| `{story.team}`       | Team mention name (e.g. `platform`) |
 | `{epic.name}`        | Epic title                     |
 | `{epic.id}`          | Epic ID                        |
 | `{epic.idName}`      | `id: name`                     |
 | `{epic.url}`         | Epic app URL                   |
 | `{epic.state}`       | Epic state name (e.g. "In Progress") |
+| `{epic.owner}`       | First owner's mention name     |
+| `{epic.team}`        | Team mention name              |
 | `{objective.name}`   | Objective (milestone) title    |
 | `{objective.id}`     | Objective ID                   |
 | `{objective.idName}` | `id: name`                     |
 | `{objective.url}`    | Objective app URL              |
 | `{objective.state}`  | Objective state (e.g. "in progress") |
 
-Epic and objective are only fetched if your format references them. State
-fields trigger a one-time workspace-wide workflow lookup, cached for 7 days
-(override with `SHORTCUT_STATUSLINE_WORKFLOW_TTL`).
+Epic and objective are only fetched if your format references them. State,
+owner/requestor, and team tokens trigger one-time workspace-wide lookups
+(`/workflows`, `/members`, `/groups`), each cached for 7 days (override the
+shared TTL with `SHORTCUT_STATUSLINE_WORKFLOW_TTL`).
 
 ### Flags
 

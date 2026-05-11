@@ -183,31 +183,128 @@ func TestHasNeededData(t *testing.T) {
 	milestoneID := 2
 	storyWithEpic := &shortcut.Story{EpicID: &epicID}
 	epicWithMilestone := &shortcut.Epic{ID: epicID, MilestoneID: &milestoneID}
+	cur := cache.BundleSchemaVersion
 
 	cases := []struct {
-		name                                                            string
-		b                                                               *cache.Bundle
-		wantEpic, wantObj, wantStoryState, wantEpicState, wantStoryType bool
-		ok                                                              bool
+		name string
+		b    *cache.Bundle
+		w    wants
+		ok   bool
 	}{
-		{"story only, want story", &cache.Bundle{Story: &shortcut.Story{}}, false, false, false, false, false, true},
-		{"want epic, missing", &cache.Bundle{Story: storyWithEpic}, true, false, false, false, false, false},
-		{"want epic, present", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone}, true, false, false, false, false, true},
-		{"want obj, missing", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone}, true, true, false, false, false, false},
-		{"want obj, present", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone, Objective: &shortcut.Objective{}}, true, true, false, false, false, true},
-		{"story has no epic, want epic — fine", &cache.Bundle{Story: &shortcut.Story{}}, true, true, false, false, false, true},
-		{"want story state, missing", &cache.Bundle{Story: &shortcut.Story{}}, false, false, true, false, false, false},
-		{"want story state, name but no type (old cache)", &cache.Bundle{Story: &shortcut.Story{}, StoryState: "X"}, false, false, true, false, false, false},
-		{"want story state, present", &cache.Bundle{Story: &shortcut.Story{}, StoryState: "X", StoryStateType: "started"}, false, false, true, false, false, true},
-		{"want epic state, missing", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone}, true, false, false, true, false, false},
-		{"want epic state, name but no type (old cache)", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone, EpicState: "X"}, true, false, false, true, false, false},
-		{"want epic state, present", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone, EpicState: "X", EpicStateType: "started"}, true, false, false, true, false, true},
-		{"want story type, missing (old cache)", &cache.Bundle{Story: &shortcut.Story{}}, false, false, false, false, true, false},
-		{"want story type, present", &cache.Bundle{Story: &shortcut.Story{Type: "bug"}}, false, false, false, false, true, true},
+		{"story only, want story", &cache.Bundle{SchemaVersion: cur, Story: &shortcut.Story{}}, wants{}, true},
+		{"want epic, missing", &cache.Bundle{SchemaVersion: cur, Story: storyWithEpic}, wants{Epic: true}, false},
+		{"want epic, present", &cache.Bundle{SchemaVersion: cur, Story: storyWithEpic, Epic: epicWithMilestone}, wants{Epic: true}, true},
+		{"want obj, missing", &cache.Bundle{SchemaVersion: cur, Story: storyWithEpic, Epic: epicWithMilestone}, wants{Epic: true, Obj: true}, false},
+		{"want obj, present", &cache.Bundle{SchemaVersion: cur, Story: storyWithEpic, Epic: epicWithMilestone, Objective: &shortcut.Objective{}}, wants{Epic: true, Obj: true}, true},
+		{"story has no epic, want epic — fine", &cache.Bundle{SchemaVersion: cur, Story: &shortcut.Story{}}, wants{Epic: true, Obj: true}, true},
+		{"want story state, missing", &cache.Bundle{SchemaVersion: cur, Story: &shortcut.Story{}}, wants{StoryState: true}, false},
+		{"want story state, name but no type (old field)", &cache.Bundle{SchemaVersion: cur, Story: &shortcut.Story{}, StoryState: "X"}, wants{StoryState: true}, false},
+		{"want story state, present", &cache.Bundle{SchemaVersion: cur, Story: &shortcut.Story{}, StoryState: "X", StoryStateType: "started"}, wants{StoryState: true}, true},
+		{"want epic state, missing", &cache.Bundle{SchemaVersion: cur, Story: storyWithEpic, Epic: epicWithMilestone}, wants{Epic: true, EpicState: true}, false},
+		{"want epic state, name but no type (old field)", &cache.Bundle{SchemaVersion: cur, Story: storyWithEpic, Epic: epicWithMilestone, EpicState: "X"}, wants{Epic: true, EpicState: true}, false},
+		{"want epic state, present", &cache.Bundle{SchemaVersion: cur, Story: storyWithEpic, Epic: epicWithMilestone, EpicState: "X", EpicStateType: "started"}, wants{Epic: true, EpicState: true}, true},
+		{"pre-schema-v2 bundle is stale even when fully populated", &cache.Bundle{Story: &shortcut.Story{}}, wants{}, false},
 	}
 	for _, c := range cases {
-		if got := hasNeededData(c.b, c.wantEpic, c.wantObj, c.wantStoryState, c.wantEpicState, c.wantStoryType); got != c.ok {
+		if got := hasNeededData(c.b, c.w); got != c.ok {
 			t.Errorf("%s: got %v want %v", c.name, got, c.ok)
 		}
+	}
+}
+
+func TestWantsFor(t *testing.T) {
+	cases := []struct {
+		name   string
+		fmt    string
+		colors bool
+		check  func(t *testing.T, w wants)
+	}{
+		{"story only, no colors", "{story.name}", false, func(t *testing.T, w wants) {
+			if w.Epic || w.Obj || w.StoryState || w.StoryOwner || w.members() || w.groups() {
+				t.Errorf("expected story-name only; got %+v", w)
+			}
+		}},
+		{"colors infer story state", "{story.name}", true, func(t *testing.T, w wants) {
+			if !w.StoryState {
+				t.Errorf("colors should force StoryState; got %+v", w)
+			}
+		}},
+		{"epic field promotes wantEpic", "{epic.owner}", false, func(t *testing.T, w wants) {
+			if !w.Epic || !w.EpicOwner || !w.members() {
+				t.Errorf("expected Epic+EpicOwner+members; got %+v", w)
+			}
+		}},
+		{"story team needs groups", "{story.team}", false, func(t *testing.T, w wants) {
+			if !w.StoryTeam || !w.groups() || w.members() {
+				t.Errorf("expected groups only; got %+v", w)
+			}
+		}},
+		{"requestor needs members", "{story.requestor}", false, func(t *testing.T, w wants) {
+			if !w.StoryRequestor || !w.members() {
+				t.Errorf("expected members; got %+v", w)
+			}
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			c.check(t, wantsFor(c.fmt, c.colors))
+		})
+	}
+}
+
+func TestResolverOwnerTeamRequestor(t *testing.T) {
+	b := &cache.Bundle{
+		Story:          &shortcut.Story{ID: 1, Name: "s"},
+		Epic:           &shortcut.Epic{ID: 2, Name: "e"},
+		StoryOwner:     "alice",
+		StoryRequestor: "bob",
+		StoryTeam:      "platform",
+		EpicOwner:      "carol",
+		EpicTeam:       "growth",
+	}
+	out, err := format.Render(
+		"{story.owner}|{story.requestor}|{story.team}|{epic.owner}|{epic.team}",
+		makeResolver(b, false, false),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "alice|bob|platform|carol|growth"
+	if out != want {
+		t.Errorf("got %q want %q", out, want)
+	}
+}
+
+func TestFirstOwnerNameAndLabelFallback(t *testing.T) {
+	members := map[string]cache.MemberInfo{
+		"id1": {MentionName: "alice", Name: "Alice"},
+		"id2": {Name: "No Handle"}, // mention_name empty → fallback to name
+	}
+	if got := firstOwnerName(nil, members); got != "" {
+		t.Errorf("nil ids should yield empty; got %q", got)
+	}
+	if got := firstOwnerName([]string{}, members); got != "" {
+		t.Errorf("empty ids should yield empty; got %q", got)
+	}
+	if got := firstOwnerName([]string{"id1", "id2"}, members); got != "alice" {
+		t.Errorf("want first owner alice; got %q", got)
+	}
+	if got := firstOwnerName([]string{"id2"}, members); got != "No Handle" {
+		t.Errorf("want name fallback; got %q", got)
+	}
+	if got := firstOwnerName([]string{"missing"}, members); got != "" {
+		t.Errorf("unknown id should yield empty; got %q", got)
+	}
+}
+
+func TestGroupLabelFallback(t *testing.T) {
+	if got := groupLabel(cache.GroupInfo{MentionName: "platform", Name: "Platform"}); got != "platform" {
+		t.Errorf("mention_name preferred; got %q", got)
+	}
+	if got := groupLabel(cache.GroupInfo{Name: "Just Name"}); got != "Just Name" {
+		t.Errorf("name fallback; got %q", got)
+	}
+	if got := groupLabel(cache.GroupInfo{}); got != "" {
+		t.Errorf("empty info → empty; got %q", got)
 	}
 }
