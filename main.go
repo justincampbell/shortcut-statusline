@@ -19,7 +19,7 @@ import (
 
 var version = "dev"
 
-const formatHelp = "Format string. Tokens: {story.name|id|url|status}, {epic.name|id|url|status}, {objective.name|id|url}"
+const formatHelp = "Format string. Tokens: {story.name|id|url|state}, {epic.name|id|url|state}, {objective.name|id|url|state}"
 
 func main() {
 	formatFlag := flag.String("format", "{story.name}", formatHelp)
@@ -56,9 +56,9 @@ func run(formatStr string, noCache, refresh bool) error {
 	namespaces := format.Namespaces(formatStr)
 	wantEpic := namespaces[format.NSEpic] || namespaces[format.NSObjective]
 	wantObj := namespaces[format.NSObjective]
-	wantStoryStatus := format.HasField(formatStr, format.NSStory, "status")
-	wantEpicStatus := format.HasField(formatStr, format.NSEpic, "status")
-	if wantEpicStatus {
+	wantStoryState := format.HasField(formatStr, format.NSStory, "state")
+	wantEpicState := format.HasField(formatStr, format.NSEpic, "state")
+	if wantEpicState {
 		wantEpic = true
 	}
 
@@ -75,14 +75,14 @@ func run(formatStr string, noCache, refresh bool) error {
 	if !noCache && !refresh {
 		b, fresh, err := c.Get(br)
 		if err == nil && fresh && b != nil && b.Story != nil && b.Story.ID == storyID {
-			if hasNeededData(b, wantEpic, wantObj, wantStoryStatus, wantEpicStatus) {
+			if hasNeededData(b, wantEpic, wantObj, wantStoryState, wantEpicState) {
 				bundle = b
 			}
 		}
 	}
 
 	if bundle == nil {
-		fetched, fetchErr := fetchBundle(c, storyID, wantEpic, wantObj, wantStoryStatus, wantEpicStatus, noCache, refresh)
+		fetched, fetchErr := fetchBundle(c, storyID, wantEpic, wantObj, wantStoryState, wantEpicState, noCache, refresh)
 		if fetchErr != nil {
 			// On API failure, fall back to stale cache.
 			if stale, _, err := c.Get(br); err == nil && stale != nil && stale.Story != nil && stale.Story.ID == storyID {
@@ -111,23 +111,23 @@ func run(formatStr string, noCache, refresh bool) error {
 	return nil
 }
 
-func hasNeededData(b *cache.Bundle, wantEpic, wantObj, wantStoryStatus, wantEpicStatus bool) bool {
+func hasNeededData(b *cache.Bundle, wantEpic, wantObj, wantStoryState, wantEpicState bool) bool {
 	if wantEpic && b.Story != nil && b.Story.EpicID != nil && b.Epic == nil {
 		return false
 	}
 	if wantObj && b.Epic != nil && b.Epic.MilestoneID != nil && b.Objective == nil {
 		return false
 	}
-	if wantStoryStatus && b.StoryStatus == "" {
+	if wantStoryState && b.StoryState == "" {
 		return false
 	}
-	if wantEpicStatus && b.Epic != nil && b.EpicStatus == "" {
+	if wantEpicState && b.Epic != nil && b.EpicState == "" {
 		return false
 	}
 	return true
 }
 
-func fetchBundle(c *cache.Cache, storyID int, wantEpic, wantObj, wantStoryStatus, wantEpicStatus, noCache, refresh bool) (*cache.Bundle, error) {
+func fetchBundle(c *cache.Cache, storyID int, wantEpic, wantObj, wantStoryState, wantEpicState, noCache, refresh bool) (*cache.Bundle, error) {
 	token, err := config.Token()
 	if err != nil {
 		return nil, err
@@ -157,16 +157,16 @@ func fetchBundle(c *cache.Cache, storyID int, wantEpic, wantObj, wantStoryStatus
 		}
 	}
 
-	if wantStoryStatus || wantEpicStatus {
+	if wantStoryState || wantEpicState {
 		states, err := loadWorkflowStates(ctx, c, client, noCache || refresh)
 		if err != nil {
 			return nil, err
 		}
-		if wantStoryStatus && b.Story != nil {
-			b.StoryStatus = states.Story[b.Story.WorkflowStateID]
+		if wantStoryState && b.Story != nil {
+			b.StoryState = states.Story[b.Story.WorkflowStateID]
 		}
-		if wantEpicStatus && b.Epic != nil {
-			b.EpicStatus = states.Epic[b.Epic.EpicStateID]
+		if wantEpicState && b.Epic != nil {
+			b.EpicState = states.Epic[b.Epic.EpicStateID]
 		}
 	}
 
@@ -235,8 +235,8 @@ func storyField(b *cache.Bundle, field string) (string, error) {
 		return strconv.Itoa(s.ID), nil
 	case "url":
 		return s.AppURL, nil
-	case "status":
-		return b.StoryStatus, nil
+	case "state":
+		return b.StoryState, nil
 	}
 	return "", fmt.Errorf("unknown field story.%s", field)
 }
@@ -253,8 +253,8 @@ func epicField(b *cache.Bundle, field string) (string, error) {
 		return strconv.Itoa(e.ID), nil
 	case "url":
 		return e.AppURL, nil
-	case "status":
-		return b.EpicStatus, nil
+	case "state":
+		return b.EpicState, nil
 	}
 	return "", fmt.Errorf("unknown field epic.%s", field)
 }
@@ -270,6 +270,8 @@ func objectiveField(o *shortcut.Objective, field string) (string, error) {
 		return strconv.Itoa(o.ID), nil
 	case "url":
 		return o.AppURL, nil
+	case "state":
+		return o.State, nil
 	}
 	return "", fmt.Errorf("unknown field objective.%s", field)
 }

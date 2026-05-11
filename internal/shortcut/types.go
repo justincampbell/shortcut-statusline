@@ -45,9 +45,12 @@ type EpicWorkflow struct {
 	EpicStates []EpicState `json:"epic_states"`
 }
 
-// Objective mirrors Shortcut's milestone/objective resource.
+// Objective mirrors Shortcut's milestone/objective resource. State is a
+// direct string from the API (e.g. "to do", "in progress", "done"), so no
+// extra workflow lookup is required.
 type Objective struct {
 	ID     int    `json:"id"`
 	Name   string `json:"name"`
 	AppURL string `json:"app_url"`
+	State  string `json:"state"`
 }

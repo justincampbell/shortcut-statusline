@@ -27,8 +27,8 @@ type Bundle struct {
 	Story       *shortcut.Story     `json:"story,omitempty"`
 	Epic        *shortcut.Epic      `json:"epic,omitempty"`
 	Objective   *shortcut.Objective `json:"objective,omitempty"`
-	StoryStatus string              `json:"story_status,omitempty"`
-	EpicStatus  string              `json:"epic_status,omitempty"`
+	StoryState  string              `json:"story_state,omitempty"`
+	EpicState   string              `json:"epic_state,omitempty"`
 }
 
 // WorkflowStates is the cached id→name lookup for workflow + epic states.
