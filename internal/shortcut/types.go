@@ -20,10 +20,12 @@ type Epic struct {
 }
 
 // WorkflowState is one state within a Workflow. Stories reference these by ID
-// via Story.WorkflowStateID.
+// via Story.WorkflowStateID. Type is one of "backlog", "unstarted",
+// "started", "done" and drives the semantic color.
 type WorkflowState struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
 // Workflow is a Shortcut workflow (collection of states).
@@ -34,10 +36,11 @@ type Workflow struct {
 }
 
 // EpicState is one epic-workflow state. Epics reference these by ID via
-// Epic.EpicStateID.
+// Epic.EpicStateID. Type matches WorkflowState.Type.
 type EpicState struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
 // EpicWorkflow is the workspace-wide epic workflow (Shortcut has only one).

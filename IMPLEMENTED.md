@@ -8,6 +8,7 @@ we already fetch.
 
 - [x] `{story.id}`
 - [x] `{story.name}`
+- [x] `{story.idName}` — `id: name`
 - [x] `{story.url}` — `app_url`
 - [x] `{story.state}` — via `/workflows` lookup
 - [ ] `{story.type}` — `story_type` ("feature" / "bug" / "chore")
@@ -35,6 +36,7 @@ we already fetch.
 
 - [x] `{epic.id}`
 - [x] `{epic.name}`
+- [x] `{epic.idName}` — `id: name`
 - [x] `{epic.url}` — `app_url`
 - [x] `{epic.state}` — via `/epic-workflow` lookup
 - [ ] `{epic.deadline}`
@@ -53,6 +55,7 @@ we already fetch.
 
 - [x] `{objective.id}`
 - [x] `{objective.name}`
+- [x] `{objective.idName}` — `id: name`
 - [x] `{objective.url}` — `app_url`
 - [x] `{objective.state}` — direct field, no lookup
 - [ ] `{objective.started}` / `{objective.started_at}`
