@@ -33,7 +33,7 @@ go install github.com/justincampbell/shortcut-statusline@latest
 ## Usage
 
 ```sh
-shortcut-statusline                                  # default: {story.idName} ({epic.idName})
+shortcut-statusline                                  # default: {story.idName} ({epic.name})
 shortcut-statusline -f '{story.name}'
 shortcut-statusline -f '{story.name} • {epic.name} • {objective.name}'
 shortcut-statusline -f '[{story.id}] {story.name}'
@@ -86,7 +86,7 @@ shared TTL with `SHORTCUT_STATUSLINE_WORKFLOW_TTL`).
 
 ### Flags
 
-- `-f, --format <string>` — default `{story.idName} ({epic.idName})`
+- `-f, --format <string>` — default `{story.idName} ({epic.name})`
 - `--no-cache` — bypass cache (for debugging)
 - `--refresh` — clear cache for the current branch and refetch
 - `--no-links` — disable OSC8 hyperlinks
