@@ -53,6 +53,7 @@ used if available, otherwise nothing is printed — the prompt is never blocked.
 | `{story.idName}`     | `id: name` (e.g. `12345: Build the thing`) |
 | `{story.url}`        | App URL                        |
 | `{story.state}`      | Workflow state name (e.g. "In Development") |
+| `{story.type}`       | `feature` / `bug` / `chore`    |
 | `{epic.name}`        | Epic title                     |
 | `{epic.id}`          | Epic ID                        |
 | `{epic.idName}`      | `id: name`                     |
@@ -87,6 +88,14 @@ the resource's workflow state, roughly matching Shortcut's web UI:
 | `backlog` / `unstarted` / `to do` | gray    |
 | `started` / `in progress` | magenta |
 | `done`                     | green   |
+
+`{story.type}` has its own palette:
+
+| Story type | Color  |
+|------------|--------|
+| `bug`      | red    |
+| `chore`    | yellow |
+| `feature`  | cyan   |
 
 On by default. Disable with `--no-color`, `SHORTCUT_STATUSLINE_NO_COLOR=1`,
 or `NO_COLOR` (any non-empty value, per [no-color.org](https://no-color.org/)).

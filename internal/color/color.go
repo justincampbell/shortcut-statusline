@@ -9,14 +9,18 @@ package color
 
 import "os"
 
-// ANSI SGR codes for the three buckets we use. Reflects Shortcut's web UI
-// roughly: gray for unstarted/backlog, magenta for in-progress, green for
-// done.
+// ANSI SGR codes for the buckets we use. State buckets reflect Shortcut's
+// web UI roughly: gray for unstarted/backlog, magenta for in-progress, green
+// for done. Story-type buckets pick distinct hues so {story.type} pops next
+// to the state-colored name.
 const (
 	Reset  = "\x1b[0m"
 	Gray   = "\x1b[90m"
-	Purple = "\x1b[35m"
+	Red    = "\x1b[31m"
 	Green  = "\x1b[32m"
+	Yellow = "\x1b[33m"
+	Purple = "\x1b[35m"
+	Cyan   = "\x1b[36m"
 )
 
 // Wrap returns text wrapped in code…Reset. Empty code returns text unchanged.
@@ -37,6 +41,20 @@ func ForStateType(t string) string {
 		return Purple
 	case "backlog", "unstarted":
 		return Gray
+	}
+	return ""
+}
+
+// ForStoryType maps the Shortcut `story_type` field ("feature", "bug",
+// "chore") to an ANSI color. Anything else → "".
+func ForStoryType(t string) string {
+	switch t {
+	case "bug":
+		return Red
+	case "chore":
+		return Yellow
+	case "feature":
+		return Cyan
 	}
 	return ""
 }

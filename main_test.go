@@ -117,6 +117,35 @@ func TestResolverWithColors(t *testing.T) {
 	}
 }
 
+func TestResolverStoryType(t *testing.T) {
+	b := &cache.Bundle{Story: &shortcut.Story{ID: 1, Name: "s", Type: "bug"}}
+	out, err := format.Render("{story.type}", makeResolver(b, false, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "bug" {
+		t.Errorf("got %q want %q", out, "bug")
+	}
+}
+
+func TestResolverStoryTypeColors(t *testing.T) {
+	cases := map[string]string{
+		"bug":     "\x1b[31mbug\x1b[0m",
+		"chore":   "\x1b[33mchore\x1b[0m",
+		"feature": "\x1b[36mfeature\x1b[0m",
+	}
+	for typ, want := range cases {
+		b := &cache.Bundle{Story: &shortcut.Story{ID: 1, Name: "s", Type: typ}}
+		out, err := format.Render("{story.type}", makeResolver(b, false, true))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out != want {
+			t.Errorf("type=%q: got %q want %q", typ, out, want)
+		}
+	}
+}
+
 func TestResolverObjectiveColor(t *testing.T) {
 	b := &cache.Bundle{
 		Objective: &shortcut.Objective{ID: 99, Name: "obj", State: "done"},
@@ -156,26 +185,28 @@ func TestHasNeededData(t *testing.T) {
 	epicWithMilestone := &shortcut.Epic{ID: epicID, MilestoneID: &milestoneID}
 
 	cases := []struct {
-		name                                              string
-		b                                                 *cache.Bundle
-		wantEpic, wantObj, wantStoryState, wantEpicState bool
-		ok                                                bool
+		name                                                            string
+		b                                                               *cache.Bundle
+		wantEpic, wantObj, wantStoryState, wantEpicState, wantStoryType bool
+		ok                                                              bool
 	}{
-		{"story only, want story", &cache.Bundle{Story: &shortcut.Story{}}, false, false, false, false, true},
-		{"want epic, missing", &cache.Bundle{Story: storyWithEpic}, true, false, false, false, false},
-		{"want epic, present", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone}, true, false, false, false, true},
-		{"want obj, missing", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone}, true, true, false, false, false},
-		{"want obj, present", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone, Objective: &shortcut.Objective{}}, true, true, false, false, true},
-		{"story has no epic, want epic — fine", &cache.Bundle{Story: &shortcut.Story{}}, true, true, false, false, true},
-		{"want story state, missing", &cache.Bundle{Story: &shortcut.Story{}}, false, false, true, false, false},
-		{"want story state, name but no type (old cache)", &cache.Bundle{Story: &shortcut.Story{}, StoryState: "X"}, false, false, true, false, false},
-		{"want story state, present", &cache.Bundle{Story: &shortcut.Story{}, StoryState: "X", StoryStateType: "started"}, false, false, true, false, true},
-		{"want epic state, missing", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone}, true, false, false, true, false},
-		{"want epic state, name but no type (old cache)", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone, EpicState: "X"}, true, false, false, true, false},
-		{"want epic state, present", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone, EpicState: "X", EpicStateType: "started"}, true, false, false, true, true},
+		{"story only, want story", &cache.Bundle{Story: &shortcut.Story{}}, false, false, false, false, false, true},
+		{"want epic, missing", &cache.Bundle{Story: storyWithEpic}, true, false, false, false, false, false},
+		{"want epic, present", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone}, true, false, false, false, false, true},
+		{"want obj, missing", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone}, true, true, false, false, false, false},
+		{"want obj, present", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone, Objective: &shortcut.Objective{}}, true, true, false, false, false, true},
+		{"story has no epic, want epic — fine", &cache.Bundle{Story: &shortcut.Story{}}, true, true, false, false, false, true},
+		{"want story state, missing", &cache.Bundle{Story: &shortcut.Story{}}, false, false, true, false, false, false},
+		{"want story state, name but no type (old cache)", &cache.Bundle{Story: &shortcut.Story{}, StoryState: "X"}, false, false, true, false, false, false},
+		{"want story state, present", &cache.Bundle{Story: &shortcut.Story{}, StoryState: "X", StoryStateType: "started"}, false, false, true, false, false, true},
+		{"want epic state, missing", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone}, true, false, false, true, false, false},
+		{"want epic state, name but no type (old cache)", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone, EpicState: "X"}, true, false, false, true, false, false},
+		{"want epic state, present", &cache.Bundle{Story: storyWithEpic, Epic: epicWithMilestone, EpicState: "X", EpicStateType: "started"}, true, false, false, true, false, true},
+		{"want story type, missing (old cache)", &cache.Bundle{Story: &shortcut.Story{}}, false, false, false, false, true, false},
+		{"want story type, present", &cache.Bundle{Story: &shortcut.Story{Type: "bug"}}, false, false, false, false, true, true},
 	}
 	for _, c := range cases {
-		if got := hasNeededData(c.b, c.wantEpic, c.wantObj, c.wantStoryState, c.wantEpicState); got != c.ok {
+		if got := hasNeededData(c.b, c.wantEpic, c.wantObj, c.wantStoryState, c.wantEpicState, c.wantStoryType); got != c.ok {
 			t.Errorf("%s: got %v want %v", c.name, got, c.ok)
 		}
 	}

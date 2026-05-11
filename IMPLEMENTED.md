@@ -11,7 +11,7 @@ we already fetch.
 - [x] `{story.idName}` — `id: name`
 - [x] `{story.url}` — `app_url`
 - [x] `{story.state}` — via `/workflows` lookup
-- [ ] `{story.type}` — `story_type` ("feature" / "bug" / "chore")
+- [x] `{story.type}` — `story_type` ("feature" / "bug" / "chore"); colored red/yellow/cyan
 - [ ] `{story.deadline}`
 - [ ] `{story.estimate}`
 - [ ] `{story.started}` / `{story.started_at}`

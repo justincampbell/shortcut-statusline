@@ -21,7 +21,7 @@ import (
 
 var version = "dev"
 
-const formatHelp = "Format string. Tokens: {story.name|id|idName|url|state}, {epic.name|id|idName|url|state}, {objective.name|id|idName|url|state}"
+const formatHelp = "Format string. Tokens: {story.name|id|idName|url|state|type}, {epic.name|id|idName|url|state}, {objective.name|id|idName|url|state}"
 
 func main() {
 	const defaultFormat = "{story.idName} ({epic.idName})"
@@ -68,6 +68,7 @@ func run(formatStr string, noCache, refresh, links, colors bool) error {
 	// in the format.
 	wantStoryState := format.HasField(formatStr, format.NSStory, "state") || (colors && namespaces[format.NSStory])
 	wantEpicState := format.HasField(formatStr, format.NSEpic, "state") || (colors && namespaces[format.NSEpic])
+	wantStoryType := format.HasField(formatStr, format.NSStory, "type")
 	if wantEpicState {
 		wantEpic = true
 	}
@@ -85,7 +86,7 @@ func run(formatStr string, noCache, refresh, links, colors bool) error {
 	if !noCache && !refresh {
 		b, fresh, err := c.Get(br)
 		if err == nil && fresh && b != nil && b.Story != nil && b.Story.ID == storyID {
-			if hasNeededData(b, wantEpic, wantObj, wantStoryState, wantEpicState) {
+			if hasNeededData(b, wantEpic, wantObj, wantStoryState, wantEpicState, wantStoryType) {
 				bundle = b
 			}
 		}
@@ -121,7 +122,7 @@ func run(formatStr string, noCache, refresh, links, colors bool) error {
 	return nil
 }
 
-func hasNeededData(b *cache.Bundle, wantEpic, wantObj, wantStoryState, wantEpicState bool) bool {
+func hasNeededData(b *cache.Bundle, wantEpic, wantObj, wantStoryState, wantEpicState, wantStoryType bool) bool {
 	if wantEpic && b.Story != nil && b.Story.EpicID != nil && b.Epic == nil {
 		return false
 	}
@@ -135,6 +136,11 @@ func hasNeededData(b *cache.Bundle, wantEpic, wantObj, wantStoryState, wantEpicS
 		return false
 	}
 	if wantEpicState && b.Epic != nil && (b.EpicState == "" || b.EpicStateType == "") {
+		return false
+	}
+	// story_type is always set on a live story; an empty value means the
+	// cache predates the field, so refetch when the format needs it.
+	if wantStoryType && b.Story != nil && b.Story.Type == "" {
 		return false
 	}
 	return true
@@ -260,6 +266,12 @@ func storyField(b *cache.Bundle, field string, links, colors bool) (string, erro
 		return s.AppURL, nil
 	case "state":
 		return color.Wrap(b.StoryState, c), nil
+	case "type":
+		tc := ""
+		if colors {
+			tc = color.ForStoryType(s.Type)
+		}
+		return color.Wrap(s.Type, tc), nil
 	}
 	return "", fmt.Errorf("unknown field story.%s", field)
 }

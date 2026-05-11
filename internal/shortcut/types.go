@@ -8,6 +8,7 @@ type Story struct {
 	EpicID          *int   `json:"epic_id"`
 	AppURL          string `json:"app_url"`
 	WorkflowStateID int    `json:"workflow_state_id"`
+	Type            string `json:"story_type"`
 }
 
 // Epic is the subset of Shortcut epic fields we care about today.

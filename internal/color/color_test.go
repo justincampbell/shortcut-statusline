@@ -18,6 +18,21 @@ func TestForStateType(t *testing.T) {
 	}
 }
 
+func TestForStoryType(t *testing.T) {
+	cases := map[string]string{
+		"bug":     Red,
+		"chore":   Yellow,
+		"feature": Cyan,
+		"":        "",
+		"weird":   "",
+	}
+	for in, want := range cases {
+		if got := ForStoryType(in); got != want {
+			t.Errorf("ForStoryType(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestForObjectiveState(t *testing.T) {
 	cases := map[string]string{
 		"done":        Green,
