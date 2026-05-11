@@ -394,7 +394,9 @@ func storyField(b *cache.Bundle, field string, links, colors bool) (string, erro
 		if colors {
 			tc = color.ForStoryType(s.Type)
 		}
-		return color.Wrap(s.Type, tc), nil
+		// API returns lowercase ("bug" / "chore" / "feature"); render
+		// capitalized to match Shortcut's web UI.
+		return color.Wrap(capitalizeASCII(s.Type), tc), nil
 	case "owner":
 		return b.StoryOwner, nil
 	case "requestor":
@@ -464,4 +466,17 @@ func decorate(text, url, colorCode string, links bool) string {
 		text = osc8.Wrap(text, url)
 	}
 	return color.Wrap(text, colorCode)
+}
+
+// capitalizeASCII upper-cases the first byte. Sufficient for the
+// fixed set of story_type values, which are all-ASCII.
+func capitalizeASCII(s string) string {
+	if s == "" {
+		return s
+	}
+	b := []byte(s)
+	if b[0] >= 'a' && b[0] <= 'z' {
+		b[0] -= 'a' - 'A'
+	}
+	return string(b)
 }

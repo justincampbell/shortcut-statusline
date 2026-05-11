@@ -123,16 +123,16 @@ func TestResolverStoryType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out != "bug" {
-		t.Errorf("got %q want %q", out, "bug")
+	if out != "Bug" {
+		t.Errorf("got %q want %q", out, "Bug")
 	}
 }
 
 func TestResolverStoryTypeColors(t *testing.T) {
 	cases := map[string]string{
-		"bug":     "\x1b[31mbug\x1b[0m",
-		"chore":   "\x1b[33mchore\x1b[0m",
-		"feature": "\x1b[36mfeature\x1b[0m",
+		"bug":     "\x1b[31mBug\x1b[0m",
+		"chore":   "\x1b[33mChore\x1b[0m",
+		"feature": "\x1b[36mFeature\x1b[0m",
 	}
 	for typ, want := range cases {
 		b := &cache.Bundle{Story: &shortcut.Story{ID: 1, Name: "s", Type: typ}}
@@ -142,6 +142,21 @@ func TestResolverStoryTypeColors(t *testing.T) {
 		}
 		if out != want {
 			t.Errorf("type=%q: got %q want %q", typ, out, want)
+		}
+	}
+}
+
+func TestCapitalizeASCII(t *testing.T) {
+	cases := map[string]string{
+		"":        "",
+		"a":       "A",
+		"bug":     "Bug",
+		"Feature": "Feature", // already capitalized — left alone
+		"123":     "123",     // non-letter first byte — left alone
+	}
+	for in, want := range cases {
+		if got := capitalizeASCII(in); got != want {
+			t.Errorf("capitalizeASCII(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
