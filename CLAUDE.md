@@ -25,6 +25,27 @@ token ships or a new field is considered.
 - **Exit 0 on every recoverable failure.** Errors go to stderr; the prompt keeps moving.
 - **Lazy fetch.** Only fetch the epic if the format references `epic.*` or `objective.*`. Only fetch the objective if the format references `objective.*`. Only fetch workflows if the format references `story.state` or `epic.state`. Workflow lookups are cached separately with a much longer TTL (`DefaultWorkflowTTL`, 7d) since they change rarely.
 
+## Local development
+
+- **Inspect API shapes** before adding a new field. The token from the local
+  shortcut-cli config works against the live API:
+  ```sh
+  TOKEN=$(jq -r .token ~/.config/shortcut-cli/config.json)
+  curl -s -H "Shortcut-Token: $TOKEN" \
+    https://api.app.shortcut.com/api/v3/<endpoint> | jq .
+  ```
+  Use `search/stories?query=is:story&page_size=1` (or `search/epics`) to get
+  one of any object and see its real field list.
+- **Smoke-test against a real worktree** whose branch contains `sc-NNNNN`.
+  The on-disk cache lives at `~/Library/Caches/shortcut-statusline/` on
+  macOS — `rm -f ~/Library/Caches/shortcut-statusline/*.json` to force a
+  fresh fetch when validating a change.
+- **Test data must be synthetic.** Tests use placeholder story IDs like
+  `sc-12345` and made-up names. Never reference real Shortcut stories,
+  customer/org names, or branch names from work projects.
+- `PLAN.md` is untracked on purpose — it's the original planning doc, kept
+  locally as a reference. Not source.
+
 ## Build / test / install
 
 ```
