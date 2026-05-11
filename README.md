@@ -30,10 +30,15 @@ go install github.com/justincampbell/shortcut-statusline@latest
 ## Usage
 
 ```sh
+shortcut-statusline                                  # default: {story.id}: {story.name} ({epic.name})
 shortcut-statusline -f '{story.name}'
 shortcut-statusline -f '{story.name} • {epic.name} • {objective.name}'
 shortcut-statusline -f '[{story.id}] {story.name}'
 ```
+
+Empty enclosures (`()`, `[]`, `{}`) left by missing values are stripped from
+the output, so the default format renders as `12345: Story Name` for a
+story without an epic.
 
 If the branch has no `sc-NNNNN` in it, or you're outside a git repo, the
 command prints nothing and exits 0. Same on network errors: a stale cache is
@@ -62,7 +67,7 @@ fields trigger a one-time workspace-wide workflow lookup, cached for 7 days
 
 ### Flags
 
-- `-f, --format <string>` — default `{story.name}`
+- `-f, --format <string>` — default `{story.id}: {story.name} ({epic.name})`
 - `--no-cache` — bypass cache (for debugging)
 - `--refresh` — clear cache for the current branch and refetch
 - `--no-links` — disable OSC8 hyperlinks

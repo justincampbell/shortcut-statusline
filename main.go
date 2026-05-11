@@ -23,8 +23,9 @@ var version = "dev"
 const formatHelp = "Format string. Tokens: {story.name|id|url|state}, {epic.name|id|url|state}, {objective.name|id|url|state}"
 
 func main() {
-	formatFlag := flag.String("format", "{story.name}", formatHelp)
-	flag.StringVar(formatFlag, "f", "{story.name}", "Format string (shorthand)")
+	const defaultFormat = "{story.id}: {story.name} ({epic.name})"
+	formatFlag := flag.String("format", defaultFormat, formatHelp)
+	flag.StringVar(formatFlag, "f", defaultFormat, "Format string (shorthand)")
 	noCacheFlag := flag.Bool("no-cache", false, "Bypass the on-disk cache")
 	refreshFlag := flag.Bool("refresh", false, "Clear cache for the current branch and refetch")
 	noLinksFlag := flag.Bool("no-links", false, "Disable OSC8 hyperlinks regardless of terminal detection")

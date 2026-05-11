@@ -71,7 +71,17 @@ func TestRenderError(t *testing.T) {
 }
 
 func TestCollapseWhitespace(t *testing.T) {
-	if got := CollapseWhitespace("  a    b  "); got != "a b" {
-		t.Errorf("got %q", got)
+	cases := map[string]string{
+		"  a    b  ":           "a b",
+		"12345: Story ()":      "12345: Story",
+		"12345: Story () tail": "12345: Story tail",
+		"() Story":             "Story",
+		"[12345] []":           "[12345]",
+		"a {} b":               "a b",
+	}
+	for in, want := range cases {
+		if got := CollapseWhitespace(in); got != want {
+			t.Errorf("CollapseWhitespace(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
