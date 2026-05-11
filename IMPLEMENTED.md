@@ -24,9 +24,9 @@ we already fetch.
 - [ ] `{story.pull_requests}` — count
 - [ ] `{story.blocked}` / `{story.blocker}` — booleans
 - [ ] `{story.archived}` — boolean
-- [x] `{story.owner}` — first owner's `mention_name` via `/members` lookup
-- [x] `{story.requestor}` — `mention_name` via `/members` lookup
-- [x] `{story.team}` — group `mention_name` via `/groups` lookup
+- [x] `{story.owner}` / `{story.ownerMention}` / `{story.ownerName}` — first owner; `mention_name`, `@mention_name`, full name (via `/members` lookup)
+- [x] `{story.requestor}` / `{story.requestorMention}` / `{story.requestorName}` — same three variants via `/members` lookup
+- [x] `{story.team}` / `{story.teamMention}` / `{story.teamName}` — group mention handle, `@`-prefixed, and display name (via `/groups` lookup)
 - [ ] `{story.iteration}` — `iteration_id`, needs `/iterations` lookup
 - [ ] `{story.labels}` — `labels[].name`, joined
 - [ ] `{story.priority}` / other custom fields — `custom_fields`
@@ -46,8 +46,8 @@ we already fetch.
 - [ ] `{epic.completed}` / `{epic.completed_at}`
 - [ ] `{epic.created_at}` / `{epic.updated_at}`
 - [ ] `{epic.archived}`
-- [x] `{epic.owner}` — first owner's `mention_name` via `/members` lookup
-- [x] `{epic.team}` — group `mention_name` via `/groups` lookup
+- [x] `{epic.owner}` / `{epic.ownerMention}` / `{epic.ownerName}` — same three variants as story
+- [x] `{epic.team}` / `{epic.teamMention}` / `{epic.teamName}` — same three variants as story
 - [ ] `{epic.labels}` — `labels[].name`
 - [ ] `{epic.description}`
 

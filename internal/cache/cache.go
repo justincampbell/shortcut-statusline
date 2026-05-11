@@ -26,9 +26,12 @@ const DefaultWorkflowTTL = 7 * 24 * time.Hour
 // can't be populated from an older cached payload. A cached bundle with a
 // lower SchemaVersion is treated as needing a refetch even when otherwise
 // fresh — see hasNeededData in main.go.
-const BundleSchemaVersion = 2
+const BundleSchemaVersion = 3
 
-// Bundle is the cached set of resources for one branch.
+// Bundle is the cached set of resources for one branch. Owner / requestor
+// / team fields keep the full MemberInfo / GroupInfo records so callers
+// can render whichever variant ({owner}, {ownerMention}, {ownerName}) the
+// format requests without re-fetching.
 type Bundle struct {
 	SchemaVersion  int                 `json:"schema_version,omitempty"`
 	FetchedAt      int64               `json:"fetched_at"`
@@ -39,11 +42,11 @@ type Bundle struct {
 	StoryStateType string              `json:"story_state_type,omitempty"`
 	EpicState      string              `json:"epic_state,omitempty"`
 	EpicStateType  string              `json:"epic_state_type,omitempty"`
-	StoryOwner     string              `json:"story_owner,omitempty"`
-	StoryRequestor string              `json:"story_requestor,omitempty"`
-	StoryTeam      string              `json:"story_team,omitempty"`
-	EpicOwner      string              `json:"epic_owner,omitempty"`
-	EpicTeam       string              `json:"epic_team,omitempty"`
+	StoryOwner     *MemberInfo         `json:"story_owner,omitempty"`
+	StoryRequestor *MemberInfo         `json:"story_requestor,omitempty"`
+	StoryTeam      *GroupInfo          `json:"story_team,omitempty"`
+	EpicOwner      *MemberInfo         `json:"epic_owner,omitempty"`
+	EpicTeam       *GroupInfo          `json:"epic_team,omitempty"`
 }
 
 // StateInfo is the cached name+type for a single workflow state.

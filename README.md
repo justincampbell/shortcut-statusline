@@ -54,16 +54,22 @@ used if available, otherwise nothing is printed — the prompt is never blocked.
 | `{story.url}`        | App URL                        |
 | `{story.state}`      | Workflow state name (e.g. "In Development") |
 | `{story.type}`       | `Feature` / `Bug` / `Chore`    |
-| `{story.owner}`      | First owner's mention name (e.g. `alice`) |
-| `{story.requestor}`  | Requestor's mention name       |
-| `{story.team}`       | Team mention name (e.g. `platform`) |
+| `{story.owner}`      | First owner's mention handle (e.g. `justincampbell`) |
+| `{story.ownerMention}` | `@`-prefixed handle, Shortcut notification form (e.g. `@justincampbell`) |
+| `{story.ownerName}`  | Full display name (e.g. `Justin Campbell`) |
+| `{story.requestor}`  | Requestor's mention handle     |
+| `{story.requestorMention}` | `@`-prefixed handle          |
+| `{story.requestorName}` | Full display name           |
+| `{story.team}`       | Team handle (e.g. `platform`)  |
+| `{story.teamMention}`| `@`-prefixed team handle       |
+| `{story.teamName}`   | Team display name (e.g. `Platform`) |
 | `{epic.name}`        | Epic title                     |
 | `{epic.id}`          | Epic ID                        |
 | `{epic.idName}`      | `id: name`                     |
 | `{epic.url}`         | Epic app URL                   |
 | `{epic.state}`       | Epic state name (e.g. "In Progress") |
-| `{epic.owner}`       | First owner's mention name     |
-| `{epic.team}`        | Team mention name              |
+| `{epic.owner}` / `{epic.ownerMention}` / `{epic.ownerName}` | Same three variants as story |
+| `{epic.team}` / `{epic.teamMention}` / `{epic.teamName}` | Same three variants as story |
 | `{objective.name}`   | Objective (milestone) title    |
 | `{objective.id}`     | Objective ID                   |
 | `{objective.idName}` | `id: name`                     |

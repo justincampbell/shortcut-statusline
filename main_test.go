@@ -267,59 +267,101 @@ func TestWantsFor(t *testing.T) {
 	}
 }
 
-func TestResolverOwnerTeamRequestor(t *testing.T) {
+func TestResolverOwnerTeamRequestorAllVariants(t *testing.T) {
 	b := &cache.Bundle{
 		Story:          &shortcut.Story{ID: 1, Name: "s"},
 		Epic:           &shortcut.Epic{ID: 2, Name: "e"},
-		StoryOwner:     "alice",
-		StoryRequestor: "bob",
-		StoryTeam:      "platform",
-		EpicOwner:      "carol",
-		EpicTeam:       "growth",
+		StoryOwner:     &cache.MemberInfo{MentionName: "justincampbell", Name: "Justin Campbell"},
+		StoryRequestor: &cache.MemberInfo{MentionName: "bob", Name: "Bob Smith"},
+		StoryTeam:      &cache.GroupInfo{MentionName: "platform", Name: "Platform"},
+		EpicOwner:      &cache.MemberInfo{MentionName: "carol", Name: "Carol Jones"},
+		EpicTeam:       &cache.GroupInfo{MentionName: "growth", Name: "Growth"},
 	}
-	out, err := format.Render(
-		"{story.owner}|{story.requestor}|{story.team}|{epic.owner}|{epic.team}",
-		makeResolver(b, false, false),
-	)
-	if err != nil {
-		t.Fatal(err)
+	r := makeResolver(b, false, false)
+
+	cases := map[string]string{
+		"{story.owner}":            "justincampbell",
+		"{story.ownerMention}":     "@justincampbell",
+		"{story.ownerName}":        "Justin Campbell",
+		"{story.requestor}":        "bob",
+		"{story.requestorMention}": "@bob",
+		"{story.requestorName}":    "Bob Smith",
+		"{story.team}":             "platform",
+		"{story.teamMention}":      "@platform",
+		"{story.teamName}":         "Platform",
+		"{epic.owner}":             "carol",
+		"{epic.ownerMention}":      "@carol",
+		"{epic.ownerName}":         "Carol Jones",
+		"{epic.team}":              "growth",
+		"{epic.teamMention}":       "@growth",
+		"{epic.teamName}":          "Growth",
 	}
-	want := "alice|bob|platform|carol|growth"
-	if out != want {
-		t.Errorf("got %q want %q", out, want)
+	for in, want := range cases {
+		out, err := format.Render(in, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out != want {
+			t.Errorf("%s: got %q want %q", in, out, want)
+		}
 	}
 }
 
-func TestFirstOwnerNameAndLabelFallback(t *testing.T) {
+func TestResolverOwnerTeamRequestorMissing(t *testing.T) {
+	// Nil member/group pointers should render as empty for every variant
+	// — never bare "@" or partial output.
+	b := &cache.Bundle{Story: &shortcut.Story{}, Epic: &shortcut.Epic{}}
+	r := makeResolver(b, false, false)
+	fields := []string{
+		"{story.owner}", "{story.ownerMention}", "{story.ownerName}",
+		"{story.requestor}", "{story.requestorMention}", "{story.requestorName}",
+		"{story.team}", "{story.teamMention}", "{story.teamName}",
+		"{epic.owner}", "{epic.ownerMention}", "{epic.ownerName}",
+		"{epic.team}", "{epic.teamMention}", "{epic.teamName}",
+	}
+	for _, f := range fields {
+		out, err := format.Render(f, r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out != "" {
+			t.Errorf("%s: expected empty, got %q", f, out)
+		}
+	}
+}
+
+func TestMentionHelpersHandleEmptyMentionName(t *testing.T) {
+	// Member with only a name (no mention_name) — bare {owner} returns ""
+	// (no implicit fall-back); {ownerMention} returns "" rather than bare
+	// "@"; {ownerName} returns the name.
+	m := &cache.MemberInfo{Name: "No Handle"}
+	if got := memberMention(m); got != "" {
+		t.Errorf("memberMention without handle = %q", got)
+	}
+	if got := memberAtMention(m); got != "" {
+		t.Errorf("memberAtMention without handle should be empty, got %q", got)
+	}
+	if got := memberDisplayName(m); got != "No Handle" {
+		t.Errorf("memberDisplayName = %q", got)
+	}
+	g := &cache.GroupInfo{Name: "Just A Name"}
+	if got := groupAtMention(g); got != "" {
+		t.Errorf("groupAtMention without handle should be empty, got %q", got)
+	}
+}
+
+func TestFirstMember(t *testing.T) {
 	members := map[string]cache.MemberInfo{
 		"id1": {MentionName: "alice", Name: "Alice"},
-		"id2": {Name: "No Handle"}, // mention_name empty → fallback to name
+		"id2": {MentionName: "bob"},
 	}
-	if got := firstOwnerName(nil, members); got != "" {
-		t.Errorf("nil ids should yield empty; got %q", got)
+	if got := firstMember(nil, members); got != nil {
+		t.Errorf("nil ids → nil, got %+v", got)
 	}
-	if got := firstOwnerName([]string{}, members); got != "" {
-		t.Errorf("empty ids should yield empty; got %q", got)
+	if got := firstMember([]string{"id1", "id2"}, members); got == nil || got.MentionName != "alice" {
+		t.Errorf("first member = %+v", got)
 	}
-	if got := firstOwnerName([]string{"id1", "id2"}, members); got != "alice" {
-		t.Errorf("want first owner alice; got %q", got)
-	}
-	if got := firstOwnerName([]string{"id2"}, members); got != "No Handle" {
-		t.Errorf("want name fallback; got %q", got)
-	}
-	if got := firstOwnerName([]string{"missing"}, members); got != "" {
-		t.Errorf("unknown id should yield empty; got %q", got)
-	}
-}
-
-func TestGroupLabelFallback(t *testing.T) {
-	if got := groupLabel(cache.GroupInfo{MentionName: "platform", Name: "Platform"}); got != "platform" {
-		t.Errorf("mention_name preferred; got %q", got)
-	}
-	if got := groupLabel(cache.GroupInfo{Name: "Just Name"}); got != "Just Name" {
-		t.Errorf("name fallback; got %q", got)
-	}
-	if got := groupLabel(cache.GroupInfo{}); got != "" {
-		t.Errorf("empty info → empty; got %q", got)
+	if got := firstMember([]string{"missing"}, members); got != nil {
+		t.Errorf("unknown id → nil, got %+v", got)
 	}
 }

@@ -21,7 +21,7 @@ import (
 
 var version = "dev"
 
-const formatHelp = "Format string. Tokens: {story.name|id|idName|url|state|type|owner|requestor|team}, {epic.name|id|idName|url|state|owner|team}, {objective.name|id|idName|url|state}"
+const formatHelp = "Format string. Tokens: {story.name|id|idName|url|state|type|owner|ownerMention|ownerName|requestor|requestorMention|requestorName|team|teamMention|teamName}, {epic.…} (same minus requestor), {objective.name|id|idName|url|state}. See README for the full list."
 
 func main() {
 	const defaultFormat = "{story.idName} ({epic.idName})"
@@ -126,6 +126,9 @@ type wants struct {
 
 func wantsFor(formatStr string, colors bool) wants {
 	namespaces := format.Namespaces(formatStr)
+	ownerFields := []string{"owner", "ownerMention", "ownerName"}
+	requestorFields := []string{"requestor", "requestorMention", "requestorName"}
+	teamFields := []string{"team", "teamMention", "teamName"}
 	w := wants{
 		Epic: namespaces[format.NSEpic] || namespaces[format.NSObjective],
 		Obj:  namespaces[format.NSObjective],
@@ -135,16 +138,25 @@ func wantsFor(formatStr string, colors bool) wants {
 		StoryState:     format.HasField(formatStr, format.NSStory, "state") || (colors && namespaces[format.NSStory]),
 		EpicState:      format.HasField(formatStr, format.NSEpic, "state") || (colors && namespaces[format.NSEpic]),
 		StoryType:      format.HasField(formatStr, format.NSStory, "type"),
-		StoryOwner:     format.HasField(formatStr, format.NSStory, "owner"),
-		StoryRequestor: format.HasField(formatStr, format.NSStory, "requestor"),
-		StoryTeam:      format.HasField(formatStr, format.NSStory, "team"),
-		EpicOwner:      format.HasField(formatStr, format.NSEpic, "owner"),
-		EpicTeam:       format.HasField(formatStr, format.NSEpic, "team"),
+		StoryOwner:     anyField(formatStr, format.NSStory, ownerFields...),
+		StoryRequestor: anyField(formatStr, format.NSStory, requestorFields...),
+		StoryTeam:      anyField(formatStr, format.NSStory, teamFields...),
+		EpicOwner:      anyField(formatStr, format.NSEpic, ownerFields...),
+		EpicTeam:       anyField(formatStr, format.NSEpic, teamFields...),
 	}
 	if w.EpicState || w.EpicOwner || w.EpicTeam {
 		w.Epic = true
 	}
 	return w
+}
+
+func anyField(formatStr, ns string, fields ...string) bool {
+	for _, f := range fields {
+		if format.HasField(formatStr, ns, f) {
+			return true
+		}
+	}
+	return false
 }
 
 func (w wants) members() bool { return w.StoryOwner || w.EpicOwner || w.StoryRequestor }
@@ -227,13 +239,13 @@ func fetchBundle(c *cache.Cache, storyID int, w wants, noCache, refresh bool) (*
 			return nil, err
 		}
 		if w.StoryOwner {
-			b.StoryOwner = firstOwnerName(b.Story.OwnerIDs, members)
+			b.StoryOwner = firstMember(b.Story.OwnerIDs, members)
 		}
 		if w.StoryRequestor && b.Story.RequestedByID != "" {
-			b.StoryRequestor = memberLabel(members[b.Story.RequestedByID])
+			b.StoryRequestor = lookupMember(b.Story.RequestedByID, members)
 		}
 		if w.EpicOwner && b.Epic != nil {
-			b.EpicOwner = firstOwnerName(b.Epic.OwnerIDs, members)
+			b.EpicOwner = firstMember(b.Epic.OwnerIDs, members)
 		}
 	}
 
@@ -243,35 +255,37 @@ func fetchBundle(c *cache.Cache, storyID int, w wants, noCache, refresh bool) (*
 			return nil, err
 		}
 		if w.StoryTeam && b.Story.GroupID != nil {
-			b.StoryTeam = groupLabel(groups[*b.Story.GroupID])
+			b.StoryTeam = lookupGroup(*b.Story.GroupID, groups)
 		}
 		if w.EpicTeam && b.Epic != nil && b.Epic.GroupID != nil {
-			b.EpicTeam = groupLabel(groups[*b.Epic.GroupID])
+			b.EpicTeam = lookupGroup(*b.Epic.GroupID, groups)
 		}
 	}
 
 	return b, nil
 }
 
-func firstOwnerName(ids []string, members map[string]cache.MemberInfo) string {
+func firstMember(ids []string, members map[string]cache.MemberInfo) *cache.MemberInfo {
 	if len(ids) == 0 {
-		return ""
+		return nil
 	}
-	return memberLabel(members[ids[0]])
+	return lookupMember(ids[0], members)
 }
 
-func memberLabel(m cache.MemberInfo) string {
-	if m.MentionName != "" {
-		return m.MentionName
+func lookupMember(id string, members map[string]cache.MemberInfo) *cache.MemberInfo {
+	m, ok := members[id]
+	if !ok {
+		return nil
 	}
-	return m.Name
+	return &m
 }
 
-func groupLabel(g cache.GroupInfo) string {
-	if g.MentionName != "" {
-		return g.MentionName
+func lookupGroup(id string, groups map[string]cache.GroupInfo) *cache.GroupInfo {
+	g, ok := groups[id]
+	if !ok {
+		return nil
 	}
-	return g.Name
+	return &g
 }
 
 // loadWorkflowStates returns the workflow + epic state lookup maps, using a
@@ -398,11 +412,23 @@ func storyField(b *cache.Bundle, field string, links, colors bool) (string, erro
 		// capitalized to match Shortcut's web UI.
 		return color.Wrap(capitalizeASCII(s.Type), tc), nil
 	case "owner":
-		return b.StoryOwner, nil
+		return memberMention(b.StoryOwner), nil
+	case "ownerMention":
+		return memberAtMention(b.StoryOwner), nil
+	case "ownerName":
+		return memberDisplayName(b.StoryOwner), nil
 	case "requestor":
-		return b.StoryRequestor, nil
+		return memberMention(b.StoryRequestor), nil
+	case "requestorMention":
+		return memberAtMention(b.StoryRequestor), nil
+	case "requestorName":
+		return memberDisplayName(b.StoryRequestor), nil
 	case "team":
-		return b.StoryTeam, nil
+		return groupMention(b.StoryTeam), nil
+	case "teamMention":
+		return groupAtMention(b.StoryTeam), nil
+	case "teamName":
+		return groupDisplayName(b.StoryTeam), nil
 	}
 	return "", fmt.Errorf("unknown field story.%s", field)
 }
@@ -428,9 +454,17 @@ func epicField(b *cache.Bundle, field string, links, colors bool) (string, error
 	case "state":
 		return color.Wrap(b.EpicState, c), nil
 	case "owner":
-		return b.EpicOwner, nil
+		return memberMention(b.EpicOwner), nil
+	case "ownerMention":
+		return memberAtMention(b.EpicOwner), nil
+	case "ownerName":
+		return memberDisplayName(b.EpicOwner), nil
 	case "team":
-		return b.EpicTeam, nil
+		return groupMention(b.EpicTeam), nil
+	case "teamMention":
+		return groupAtMention(b.EpicTeam), nil
+	case "teamName":
+		return groupDisplayName(b.EpicTeam), nil
 	}
 	return "", fmt.Errorf("unknown field epic.%s", field)
 }
@@ -466,6 +500,56 @@ func decorate(text, url, colorCode string, links bool) string {
 		text = osc8.Wrap(text, url)
 	}
 	return color.Wrap(text, colorCode)
+}
+
+// memberMention returns the bare handle (`justincampbell`); empty when
+// the member isn't set.
+func memberMention(m *cache.MemberInfo) string {
+	if m == nil {
+		return ""
+	}
+	return m.MentionName
+}
+
+// memberAtMention returns `@`+handle (`@justincampbell`), the Shortcut
+// notification form. Empty when there is no handle — never bare `@`.
+func memberAtMention(m *cache.MemberInfo) string {
+	if m == nil || m.MentionName == "" {
+		return ""
+	}
+	return "@" + m.MentionName
+}
+
+// memberDisplayName returns the full real name (`Justin Campbell`).
+func memberDisplayName(m *cache.MemberInfo) string {
+	if m == nil {
+		return ""
+	}
+	return m.Name
+}
+
+// groupMention returns the bare team handle (`platform`).
+func groupMention(g *cache.GroupInfo) string {
+	if g == nil {
+		return ""
+	}
+	return g.MentionName
+}
+
+// groupAtMention returns `@`+team handle. Empty when there is no handle.
+func groupAtMention(g *cache.GroupInfo) string {
+	if g == nil || g.MentionName == "" {
+		return ""
+	}
+	return "@" + g.MentionName
+}
+
+// groupDisplayName returns the human-readable team name (`Platform`).
+func groupDisplayName(g *cache.GroupInfo) string {
+	if g == nil {
+		return ""
+	}
+	return g.Name
 }
 
 // capitalizeASCII upper-cases the first byte. Sufficient for the
