@@ -219,6 +219,44 @@ func TestHasNeededData(t *testing.T) {
 		{"want epic state, name but no type (old field)", &cache.Bundle{SchemaVersion: cur, Story: storyWithEpic, Epic: epicWithMilestone, EpicState: "X"}, wants{Epic: true, EpicState: true}, false},
 		{"want epic state, present", &cache.Bundle{SchemaVersion: cur, Story: storyWithEpic, Epic: epicWithMilestone, EpicState: "X", EpicStateType: "started"}, wants{Epic: true, EpicState: true}, true},
 		{"pre-schema-v2 bundle is stale even when fully populated", &cache.Bundle{Story: &shortcut.Story{}}, wants{}, false},
+
+		// Owner/team/requestor: bundle cached without resolving them, new
+		// format asks for them, story actually has them → refetch.
+		{
+			"want story owner, story has owners but not resolved",
+			&cache.Bundle{SchemaVersion: cur, Story: &shortcut.Story{OwnerIDs: []string{"u1"}}},
+			wants{StoryOwner: true}, false,
+		},
+		{
+			"want story owner, story has owners and resolved",
+			&cache.Bundle{SchemaVersion: cur, Story: &shortcut.Story{OwnerIDs: []string{"u1"}}, StoryOwner: &cache.MemberInfo{MentionName: "alice"}},
+			wants{StoryOwner: true}, true,
+		},
+		{
+			"want story owner, story has no owners — nil resolved is fine",
+			&cache.Bundle{SchemaVersion: cur, Story: &shortcut.Story{}},
+			wants{StoryOwner: true}, true,
+		},
+		{
+			"want story requestor, requestor present but unresolved",
+			&cache.Bundle{SchemaVersion: cur, Story: &shortcut.Story{RequestedByID: "u1"}},
+			wants{StoryRequestor: true}, false,
+		},
+		{
+			"want story team, group present but unresolved",
+			&cache.Bundle{SchemaVersion: cur, Story: &shortcut.Story{GroupID: ptrStr("g1")}},
+			wants{StoryTeam: true}, false,
+		},
+		{
+			"want epic owner, epic has owners but not resolved",
+			&cache.Bundle{SchemaVersion: cur, Story: storyWithEpic, Epic: &shortcut.Epic{ID: epicID, OwnerIDs: []string{"u1"}}},
+			wants{Epic: true, EpicOwner: true}, false,
+		},
+		{
+			"want epic team, group present but unresolved",
+			&cache.Bundle{SchemaVersion: cur, Story: storyWithEpic, Epic: &shortcut.Epic{ID: epicID, GroupID: ptrStr("g1")}},
+			wants{Epic: true, EpicTeam: true}, false,
+		},
 	}
 	for _, c := range cases {
 		if got := hasNeededData(c.b, c.w); got != c.ok {
@@ -226,6 +264,8 @@ func TestHasNeededData(t *testing.T) {
 		}
 	}
 }
+
+func ptrStr(s string) *string { return &s }
 
 func TestWantsFor(t *testing.T) {
 	cases := []struct {

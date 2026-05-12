@@ -190,6 +190,26 @@ func hasNeededData(b *cache.Bundle, w wants) bool {
 	if w.EpicState && b.Epic != nil && (b.EpicState == "" || b.EpicStateType == "") {
 		return false
 	}
+	// A bundle cached with a format that didn't ask for owner/team/requestor
+	// has the matching pointer set to nil. If the new format does ask, and
+	// the underlying ID exists on the story/epic, we need to refetch to
+	// resolve it. A nil pointer with no underlying ID is a legitimate
+	// "the story has no owner" and stays nil after refetch — leave it.
+	if w.StoryOwner && b.Story != nil && len(b.Story.OwnerIDs) > 0 && b.StoryOwner == nil {
+		return false
+	}
+	if w.StoryRequestor && b.Story != nil && b.Story.RequestedByID != "" && b.StoryRequestor == nil {
+		return false
+	}
+	if w.StoryTeam && b.Story != nil && b.Story.GroupID != nil && b.StoryTeam == nil {
+		return false
+	}
+	if w.EpicOwner && b.Epic != nil && len(b.Epic.OwnerIDs) > 0 && b.EpicOwner == nil {
+		return false
+	}
+	if w.EpicTeam && b.Epic != nil && b.Epic.GroupID != nil && b.EpicTeam == nil {
+		return false
+	}
 	return true
 }
 
