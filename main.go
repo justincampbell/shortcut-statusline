@@ -22,7 +22,7 @@ import (
 
 var version = "dev"
 
-const formatHelp = "Format string. Tokens: {story.name|id|idName|url|state|type|owner|ownerMention|ownerName|requestor|requestorMention|requestorName|team|teamMention|teamName}, {epic.…} (same minus requestor), {objective.name|id|idName|url|state}. See README for the full list."
+const formatHelp = "Format string. Tokens: {story.name|id|idName|url|state|type|typeChar|owner|ownerMention|ownerName|requestor|requestorMention|requestorName|team|teamMention|teamName}, {epic.…} (same minus requestor and typeChar), {objective.name|id|idName|url|state}. See README for the full list."
 
 func main() {
 	const defaultFormat = "{story.idName} ({epic.name})"
@@ -440,6 +440,12 @@ func storyField(b *cache.Bundle, field string, links, colors bool) (string, erro
 		// API returns lowercase ("bug" / "chore" / "feature"); render
 		// capitalized to match Shortcut's web UI.
 		return color.Wrap(capitalizeASCII(s.Type), tc), nil
+	case "typeChar":
+		tc := ""
+		if colors {
+			tc = color.ForStoryType(s.Type)
+		}
+		return color.Wrap(storyTypeChar(s.Type), tc), nil
 	case "owner":
 		return memberMention(b.StoryOwner), nil
 	case "ownerMention":
@@ -579,6 +585,21 @@ func groupDisplayName(g *cache.GroupInfo) string {
 		return ""
 	}
 	return g.Name
+}
+
+// storyTypeChar returns the one-letter code for a Shortcut story_type:
+// "F" (feature), "B" (bug), "C" (chore). Unknown types render as empty
+// so the surrounding format collapses cleanly.
+func storyTypeChar(t string) string {
+	switch t {
+	case "feature":
+		return "F"
+	case "bug":
+		return "B"
+	case "chore":
+		return "C"
+	}
+	return ""
 }
 
 // capitalizeASCII upper-cases the first byte. Sufficient for the

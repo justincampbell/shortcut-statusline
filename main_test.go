@@ -146,6 +146,40 @@ func TestResolverStoryTypeColors(t *testing.T) {
 	}
 }
 
+func TestResolverStoryTypeChar(t *testing.T) {
+	cases := map[string]struct{ plain, colored string }{
+		"bug":     {"B", "\x1b[31mB\x1b[0m"},
+		"chore":   {"C", "\x1b[33mC\x1b[0m"},
+		"feature": {"F", "\x1b[36mF\x1b[0m"},
+		"":        {"", ""},
+		"unknown": {"", ""},
+	}
+	for typ, want := range cases {
+		b := &cache.Bundle{Story: &shortcut.Story{ID: 1, Name: "s", Type: typ}}
+		if out, err := format.Render("{story.typeChar}", makeResolver(b, false, false)); err != nil || out != want.plain {
+			t.Errorf("plain type=%q: got %q err=%v want %q", typ, out, err, want.plain)
+		}
+		if out, err := format.Render("{story.typeChar}", makeResolver(b, false, true)); err != nil || out != want.colored {
+			t.Errorf("colored type=%q: got %q err=%v want %q", typ, out, err, want.colored)
+		}
+	}
+}
+
+func TestStoryTypeChar(t *testing.T) {
+	cases := map[string]string{
+		"feature": "F",
+		"bug":     "B",
+		"chore":   "C",
+		"":        "",
+		"weird":   "",
+	}
+	for in, want := range cases {
+		if got := storyTypeChar(in); got != want {
+			t.Errorf("storyTypeChar(%q) = %q want %q", in, got, want)
+		}
+	}
+}
+
 func TestCapitalizeASCII(t *testing.T) {
 	cases := map[string]string{
 		"":        "",

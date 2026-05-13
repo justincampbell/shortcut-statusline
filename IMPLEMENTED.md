@@ -12,6 +12,7 @@ we already fetch.
 - [x] `{story.url}` — `app_url`
 - [x] `{story.state}` — via `/workflows` lookup
 - [x] `{story.type}` — `story_type`, rendered title-cased (`Feature`/`Bug`/`Chore`) and colored cyan/red/yellow
+- [x] `{story.typeChar}` — one-letter form (`F`/`B`/`C`) with the same colors
 - [ ] `{story.deadline}`
 - [ ] `{story.estimate}`
 - [ ] `{story.started}` / `{story.started_at}`

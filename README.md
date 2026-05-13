@@ -57,6 +57,7 @@ used if available, otherwise nothing is printed — the prompt is never blocked.
 | `{story.url}`        | App URL                        |
 | `{story.state}`      | Workflow state name (e.g. "In Development") |
 | `{story.type}`       | `Feature` / `Bug` / `Chore`    |
+| `{story.typeChar}`   | One-letter form: `F` / `B` / `C` |
 | `{story.owner}`      | First owner's mention handle (e.g. `justincampbell`) |
 | `{story.ownerMention}` | `@`-prefixed handle, Shortcut notification form (e.g. `@justincampbell`) |
 | `{story.ownerName}`  | Full display name (e.g. `Justin Campbell`) |
